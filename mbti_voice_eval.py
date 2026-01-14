@@ -304,39 +304,64 @@ def openai_client() -> OpenAI:
     # Otherwise, use standard OpenAI
     return OpenAI(api_key=api_key)
 
-def call_model_text(client: OpenAI, model: str, instructions: str, user_input: str, *, reasoning_effort: str="low") -> str:
+def call_model_text(client: OpenAI, model: str, instructions: str, user_input: str, *, reasoning_effort: str="low", max_retries: int = 3, retry_delay: float = 2.0) -> str:
     # Try Responses API first (OpenAI), fall back to Chat API (OpenRouter/OpenAI)
-    try:
-        resp = client.responses.create(
-            model=model,
-            reasoning={"effort": reasoning_effort},
-            instructions=instructions,
-            input=user_input,
-            max_output_tokens=4096,  # Reduced to work within credit limits
-        )
-        return resp.output_text
-    except (AttributeError, Exception) as e:
-        # Fall back to Chat API for OpenRouter or older OpenAI SDK
-        messages = [
-            {"role": "system", "content": instructions},
-            {"role": "user", "content": user_input}
-        ]
-        # Force JSON mode for judge calls
-        json_mode = "json" in instructions.lower() or "judge" in instructions.lower()[:50]
-        kwargs = {
-            "model": model,
-            "messages": messages,
-            "temperature": 0.7,
-            "max_tokens": 4096,  # Reduced to work within credit limits
-        }
-        if json_mode:
-            kwargs["response_format"] = {"type": "json_object"}
-        
-        resp = client.chat.completions.create(**kwargs)
-        content = resp.choices[0].message.content
-        if not content:
-            raise ValueError("Empty response from model")
-        return content
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            try:
+                resp = client.responses.create(
+                    model=model,
+                    reasoning={"effort": reasoning_effort},
+                    instructions=instructions,
+                    input=user_input,
+                    max_output_tokens=4096,  # Reduced to work within credit limits
+                )
+                return resp.output_text
+            except (AttributeError, Exception) as e:
+                # Fall back to Chat API for OpenRouter or older OpenAI SDK
+                messages = [
+                    {"role": "system", "content": instructions},
+                    {"role": "user", "content": user_input}
+                ]
+                # Force JSON mode for judge calls
+                json_mode = "json" in instructions.lower() or "judge" in instructions.lower()[:50]
+                kwargs = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 4096,  # Reduced to work within credit limits
+                }
+                if json_mode:
+                    kwargs["response_format"] = {"type": "json_object"}
+                
+                resp = client.chat.completions.create(**kwargs)
+                content = resp.choices[0].message.content
+                if not content:
+                    raise ValueError("Empty response from model")
+                return content
+        except Exception as e:
+            last_error = e
+            error_str = str(e)
+            error_code = None
+            
+            # Check if it's a 402 error (insufficient credits)
+            if "402" in error_str or "Insufficient credits" in error_str:
+                error_code = 402
+            elif hasattr(e, 'status_code'):
+                error_code = e.status_code
+            elif hasattr(e, 'response') and hasattr(e.response, 'status_code'):
+                error_code = e.response.status_code
+            
+            # Retry on 402 errors (might be temporary)
+            if error_code == 402 and attempt < max_retries - 1:
+                delay = retry_delay * (2 ** attempt) + random.uniform(0, 1)  # Exponential backoff with jitter
+                print(f"⚠️  402 error (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s...")
+                time.sleep(delay)
+                continue
+            
+            # For other errors or final attempt, raise
+            raise
 
 def call_model_json(client: OpenAI, model: str, instructions: str, user_input: str, *, reasoning_effort: str="low", response_format: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     # Use structured outputs if available, otherwise fall back to text parsing
