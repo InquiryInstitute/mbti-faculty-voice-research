@@ -355,8 +355,8 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
             
             # Handle nested structures - extract evaluation if present
             if isinstance(parsed, dict) and "evaluation" in parsed:
-            # Convert nested evaluation structure to flat structure
-            eval_data_raw = parsed.get("evaluation", {})
+                # Convert nested evaluation structure to flat structure
+                eval_data_raw = parsed.get("evaluation", {})
             # Ensure eval_data is a dict, not a string or other type
             if isinstance(eval_data_raw, dict):
                 eval_data = eval_data_raw
