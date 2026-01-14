@@ -14,8 +14,8 @@ Env:
   export OPENROUTER_API_KEY="sk-or-v1-..." (or OPENAI_API_KEY for direct OpenAI)
   export OPENROUTER_BASE_URL="https://openrouter.ai/api/v1" (optional, auto-detected)
 Optional:
-  export OPENAI_MODEL="openai/gpt-4o" (OpenRouter model format)
-  export OPENAI_JUDGE_MODEL="openai/gpt-4o"
+  export OPENAI_MODEL="openai/gpt-oss-120b" (OpenRouter model format)
+  export OPENAI_JUDGE_MODEL="openai/gpt-oss-120b"
 """
 
 from __future__ import annotations
@@ -619,7 +619,7 @@ def run_experiment(
 ) -> None:
     client = openai_client()
     # Default models: use OpenRouter format if OpenRouter key detected, else OpenAI
-    default_model = "openai/gpt-4o" if os.getenv("OPENROUTER_API_KEY") or (os.getenv("OPENAI_API_KEY", "").startswith("sk-or-v1-")) else "gpt-4o"
+    default_model = "openai/gpt-oss-120b" if os.getenv("OPENROUTER_API_KEY") or (os.getenv("OPENAI_API_KEY", "").startswith("sk-or-v1-")) else "gpt-oss-120b"
     gen_model = generation_model or os.getenv("OPENAI_MODEL", default_model)
     j_model = judge_model or os.getenv("OPENAI_JUDGE_MODEL", default_model)
     prompts = test_prompts or DEFAULT_TEST_PROMPTS
