@@ -260,6 +260,11 @@ class JudgeResult(BaseModel):
     rationales: List[str] = Field(..., min_items=1)
     cues: List[str] = Field(..., min_items=2, max_items=5)
 
+class MBTIAssessmentResult(BaseModel):
+    mbti_type: str = Field(..., pattern=r"^(INTJ|INTP|ENTJ|ENTP|INFJ|INFP|ENFJ|ENFP|ISTJ|ISFJ|ESTJ|ESFJ|ISTP|ISFP|ESTP|ESFP)$")
+    confidence: int = Field(..., ge=1, le=5)
+    reasoning: str = Field(..., min_length=50)
+
 
 # -----------------------------
 # OpenAI helpers
