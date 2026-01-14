@@ -289,6 +289,7 @@ def call_model_text(client: OpenAI, model: str, instructions: str, user_input: s
             "model": model,
             "messages": messages,
             "temperature": 0.7,
+            "max_tokens": 4096,  # Reduced to work within credit limits
         }
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
@@ -315,6 +316,7 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
             "model": model,
             "messages": messages,
             "temperature": 0.7,
+            "max_tokens": 4096,  # Reduced to work within credit limits
         }
         
         # Use structured outputs if response_format provided (Pydantic schema)
