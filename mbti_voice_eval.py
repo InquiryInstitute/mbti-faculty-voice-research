@@ -364,14 +364,32 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
         if json_match:
             try:
                 parsed = json.loads(json_match.group(1))
+                # Ensure parsed is a dict
+                if not isinstance(parsed, dict):
+                    parsed = {"raw_response": str(parsed)}
+                
                 if isinstance(parsed, dict) and "evaluation" in parsed:
                     # Apply same transformation as above
-                    eval_data = parsed.get("evaluation", {})
-                    # Ensure eval_data is a dict
+                    eval_data_raw = parsed.get("evaluation", {})
+                    # Handle eval_data as string, dict, or other
+                    if isinstance(eval_data_raw, dict):
+                        eval_data = eval_data_raw
+                    elif isinstance(eval_data_raw, str):
+                        try:
+                            eval_data = json.loads(eval_data_raw)
+                            if not isinstance(eval_data, dict):
+                                eval_data = {}
+                        except:
+                            eval_data = {}
+                    else:
+                        eval_data = {}
+                    
+                    # Final safety check
                     if not isinstance(eval_data, dict):
                         eval_data = {}
+                    
                     result = {
-                        "voice_accuracy": eval_data.get("voice_accuracy", 3),
+                        "voice_accuracy": eval_data.get("voice_accuracy", 3) if isinstance(eval_data, dict) else 3,
                         "style_marker_coverage": 0.5,
                         "persona_consistency": 3,
                         "clarity": 3,
