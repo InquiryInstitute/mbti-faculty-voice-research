@@ -960,7 +960,8 @@ def summarize(csv_path: str = "mbti_voice_results.csv") -> None:
 if __name__ == "__main__":
     # Run:
     #   python mbti_voice_eval.py
-    run_experiment()
+    # Increased sleep delay to 1.0s to avoid rate limiting
+    run_experiment(sleep_s=1.0)
 
     # Optional quick summary:
     summarize()
