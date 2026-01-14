@@ -332,13 +332,27 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                 eval_data = {}
             
             # Try to map common evaluation formats to our schema
+            # Final safety check - ensure eval_data is definitely a dict
+            if not isinstance(eval_data, dict):
+                eval_data = {}
+            
             result = {}
-            result["voice_accuracy"] = eval_data.get("voice_accuracy", eval_data.get("voice_score", 3)) if isinstance(eval_data, dict) else 3
-            result["style_marker_coverage"] = eval_data.get("style_marker_coverage", 
-                len([k for k in eval_data.keys() if eval_data.get(k) is True]) / 4.0 if isinstance(eval_data, dict) and eval_data else 0.5) if isinstance(eval_data, dict) else 0.5
-            result["persona_consistency"] = eval_data.get("persona_consistency", eval_data.get("consistency", 3)) if isinstance(eval_data, dict) else 3
+            # Safe access with explicit type checking
+            voice_score = eval_data.get("voice_score", 3) if isinstance(eval_data, dict) else 3
+            result["voice_accuracy"] = eval_data.get("voice_accuracy", voice_score) if isinstance(eval_data, dict) else 3
+            
+            if isinstance(eval_data, dict) and eval_data:
+                style_coverage = len([k for k in eval_data.keys() if eval_data.get(k) is True]) / 4.0
+            else:
+                style_coverage = 0.5
+            result["style_marker_coverage"] = eval_data.get("style_marker_coverage", style_coverage) if isinstance(eval_data, dict) else 0.5
+            
+            consistency_val = eval_data.get("consistency", 3) if isinstance(eval_data, dict) else 3
+            result["persona_consistency"] = eval_data.get("persona_consistency", consistency_val) if isinstance(eval_data, dict) else 3
             result["clarity"] = eval_data.get("clarity", 3) if isinstance(eval_data, dict) else 3
-            result["overfitting_to_mbti"] = eval_data.get("overfitting_to_mbti", eval_data.get("overfitting", 2)) if isinstance(eval_data, dict) else 2
+            
+            overfitting_val = eval_data.get("overfitting", 2) if isinstance(eval_data, dict) else 2
+            result["overfitting_to_mbti"] = eval_data.get("overfitting_to_mbti", overfitting_val) if isinstance(eval_data, dict) else 2
             result["rationales"] = parsed.get("rationales", parsed.get("commentary", {}).values() if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
             result["cues"] = parsed.get("cues", list(parsed.get("commentary", {}).keys())[:5] if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
             return result
