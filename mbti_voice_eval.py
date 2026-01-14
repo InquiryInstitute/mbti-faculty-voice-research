@@ -676,7 +676,23 @@ def run_experiment(
         writer = csv.DictWriter(f_csv, fieldnames=fieldnames)
         writer.writeheader()
 
+        # Assess each persona's MBTI type once (cache for all trials)
+        persona_mbti_assessments = {}
+        print("Assessing persona MBTI types...")
         for persona in PERSONAE:
+            assessment = assess_persona_mbti(client, persona, j_model)
+            try:
+                assessed_result = MBTIAssessmentResult(**assessment)
+                persona_mbti_assessments[persona.key] = assessed_result.mbti_type
+                print(f"  {persona.name}: {assessed_result.mbti_type} (confidence: {assessed_result.confidence}/5)")
+            except Exception as e:
+                persona_mbti_assessments[persona.key] = "UNKNOWN"
+                print(f"  {persona.name}: Assessment failed - {str(e)[:100]}")
+            time.sleep(sleep_s)
+        print()
+
+        for persona in PERSONAE:
+            assessed_mbti = persona_mbti_assessments.get(persona.key, "UNKNOWN")
             # Run control condition (no MBTI) first
             for pi, user_prompt in enumerate(prompts):
                 use_mbti = False
