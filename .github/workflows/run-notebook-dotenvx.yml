@@ -1,0 +1,77 @@
+name: Execute MBTI Research Notebook (with dotenvx)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - 'MBTI_Research_Colab.ipynb'
+      - 'mbti_voice_eval.py'
+
+jobs:
+  execute-notebook:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dotenvx
+        uses: dotenvx/action@v4
+      
+      - name: Load encrypted .env file
+        uses: dotenvx/action@v4
+        with:
+          env_file: .env.encrypted
+          # dotenvx will decrypt using DOTENVX_KEY from secrets
+          dotenvx_key: ${{ secrets.DOTENVX_KEY }}
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install jupyter nbconvert ipykernel
+          pip install -r requirements.txt
+          pip install pandas matplotlib seaborn
+      
+      - name: Execute notebook analysis
+        run: |
+          python3 -c "
+          import pandas as pd
+          import os
+          
+          # Environment variables are now loaded from .env.encrypted
+          print('✅ Environment loaded via dotenvx')
+          
+          # Try to load results
+          try:
+              df = pd.read_csv('mbti_voice_results.csv')
+              df_valid = df[df['voice_accuracy'] != -1]
+              print(f'✅ Found {len(df_valid)} valid results')
+              
+              if len(df_valid) > 0:
+                  print(f'Average voice accuracy: {df_valid[\"voice_accuracy\"].mean():.2f}')
+          except FileNotFoundError:
+              print('⚠️  No results file found')
+          "
+      
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-results
+          path: |
+            *.png
+            *.csv
+            *.json
+            *.md
+          if-no-files-found: ignore
+
