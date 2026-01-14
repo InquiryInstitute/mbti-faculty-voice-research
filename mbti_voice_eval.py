@@ -425,7 +425,7 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
         except json.JSONDecodeError as e:
             # Try to extract JSON from markdown code blocks
             import re
-        # Strategy 1: Match ```json ... ``` or ``` ... ``` with JSON inside
+            # Strategy 1: Match ```json ... ``` or ``` ... ``` with JSON inside
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
         
         if not json_match:
@@ -665,7 +665,7 @@ def run_experiment(
 
     # CSV header
     fieldnames = [
-        "persona_key","persona_name","mbti","use_mbti","prompt_id","prompt",
+        "persona_key","persona_name","mbti","assessed_mbti","mbti_match","use_mbti","prompt_id","prompt",
         "generated_text",
         "voice_accuracy","style_marker_coverage","persona_consistency","clarity","overfitting_to_mbti",
         "rationales","cues"
