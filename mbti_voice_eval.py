@@ -312,6 +312,9 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
         if isinstance(parsed, dict) and "evaluation" in parsed:
             # Convert nested evaluation structure to flat structure
             eval_data = parsed.get("evaluation", {})
+            # Ensure eval_data is a dict, not a string
+            if not isinstance(eval_data, dict):
+                eval_data = {}
             # Try to map common evaluation formats to our schema
             result = {}
             result["voice_accuracy"] = eval_data.get("voice_accuracy", eval_data.get("voice_score", 3))
@@ -334,6 +337,9 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                 if isinstance(parsed, dict) and "evaluation" in parsed:
                     # Apply same transformation as above
                     eval_data = parsed.get("evaluation", {})
+                    # Ensure eval_data is a dict
+                    if not isinstance(eval_data, dict):
+                        eval_data = {}
                     result = {
                         "voice_accuracy": eval_data.get("voice_accuracy", 3),
                         "style_marker_coverage": 0.5,
