@@ -363,7 +363,7 @@ def call_model_text(client: OpenAI, model: str, instructions: str, user_input: s
             # For other errors or final attempt, raise
             raise
 
-def call_model_json(client: OpenAI, model: str, instructions: str, user_input: str, *, reasoning_effort: str="low", response_format: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def call_model_json(client: OpenAI, model: str, instructions: str, user_input: str, *, reasoning_effort: str="low", response_format: Optional[Dict[str, Any]] = None, max_retries: int = 3, retry_delay: float = 2.0) -> Dict[str, Any]:
     # Use structured outputs if available, otherwise fall back to text parsing
     api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
     is_openrouter = api_key and api_key.startswith("sk-or-v1-")
@@ -664,7 +664,7 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
             "persona_consistency": 3,
             "clarity": 3,
             "overfitting_to_mbti": 2,
-            "rationales": [f"JSON parse error: {str(e)[:100]}"],
+            "rationales": ["JSON parse error: Could not extract valid JSON from response"],
             "cues": ["Parse error"]
         }
 
