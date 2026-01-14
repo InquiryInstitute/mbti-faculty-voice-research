@@ -654,12 +654,24 @@ def run_experiment(
                     # Add explicit JSON requirement to judge prompt
                     judge_prompt_with_json = judge_prompt + "\n\nIMPORTANT: You must respond with ONLY valid JSON, no explanatory text before or after."
                     
+                    # Use structured outputs with Pydantic schema
+                    judge_schema = {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "judge_result",
+                            "strict": True,
+                            "schema": JudgeResult.model_json_schema(),
+                            "description": "Evaluation of assistant output against persona voice spec"
+                        }
+                    }
+                    
                     judge_raw = call_model_json(
                         client,
                         model=j_model,
                         instructions=JUDGE_INSTRUCTIONS,
                         user_input=judge_prompt_with_json,
                         reasoning_effort="low",
+                        response_format=judge_schema,
                     )
 
                     judge = None
