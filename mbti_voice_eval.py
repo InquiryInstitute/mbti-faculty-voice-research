@@ -744,7 +744,7 @@ def run_experiment(
                     "generated_text": generated,
                 }
 
-                    if judge is not None:
+                if judge is not None:
                         row.update({
                             "voice_accuracy": judge.voice_accuracy,
                             "style_marker_coverage": judge.style_marker_coverage,
