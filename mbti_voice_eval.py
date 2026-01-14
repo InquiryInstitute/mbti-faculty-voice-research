@@ -360,19 +360,39 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
     except json.JSONDecodeError as e:
         # Try to extract JSON from markdown code blocks
         import re
-        # First try: match ```json ... ``` or ``` ... ```
+        # Strategy 1: Match ```json ... ``` or ``` ... ``` with JSON inside
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+        
         if not json_match:
-            # Second try: match any content between ``` markers
-            json_match = re.search(r'```[^\n]*\n(.*?)```', text, re.DOTALL)
-            if json_match:
-                # Extract JSON from the matched content
-                inner_text = json_match.group(1).strip()
+            # Strategy 2: Match any content between ``` markers, then extract JSON
+            code_block_match = re.search(r'```[^\n]*\n(.*?)```', text, re.DOTALL)
+            if code_block_match:
+                inner_text = code_block_match.group(1).strip()
                 # Find first { and last } in the inner text
                 start = inner_text.find("{")
                 end = inner_text.rfind("}")
-                if start != -1 and end != -1:
-                    json_match = type('obj', (object,), {'group': lambda x: inner_text[start:end+1]})()
+                if start != -1 and end != -1 and end > start:
+                    # Create a mock match object
+                    class MockMatch:
+                        def group(self, n):
+                            return inner_text[start:end+1] if n == 1 else None
+                    json_match = MockMatch()
+        
+        if not json_match:
+            # Strategy 3: If text starts with ```json, try to extract everything after it
+            if text.strip().startswith("```json") or text.strip().startswith("```"):
+                # Remove the opening ```json or ```
+                cleaned = re.sub(r'^```(?:json)?\s*\n?', '', text.strip(), flags=re.MULTILINE)
+                # Remove closing ```
+                cleaned = re.sub(r'\n?```\s*$', '', cleaned, flags=re.MULTILINE)
+                # Find first { and last }
+                start = cleaned.find("{")
+                end = cleaned.rfind("}")
+                if start != -1 and end != -1 and end > start:
+                    class MockMatch:
+                        def group(self, n):
+                            return cleaned[start:end+1] if n == 1 else None
+                    json_match = MockMatch()
         
         if json_match:
             try:
