@@ -391,8 +391,40 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                 # OpenRouter uses JSON mode with schema
                 kwargs["response_format"] = {"type": "json_object"}
         
-        resp = client.chat.completions.create(**kwargs)
-        content = resp.choices[0].message.content
+        last_error = None
+        content = None
+        for attempt in range(max_retries):
+            try:
+                resp = client.chat.completions.create(**kwargs)
+                content = resp.choices[0].message.content
+                
+                if not content:
+                    raise ValueError("Empty response from model")
+                break  # Success, exit retry loop
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+                error_code = None
+                
+                # Check if it's a 402 error (insufficient credits)
+                if "402" in error_str or "Insufficient credits" in error_str:
+                    error_code = 402
+                elif hasattr(e, 'status_code'):
+                    error_code = e.status_code
+                elif hasattr(e, 'response') and hasattr(e.response, 'status_code'):
+                    error_code = e.response.status_code
+                
+                # Retry on 402 errors (might be temporary)
+                if error_code == 402 and attempt < max_retries - 1:
+                    delay = retry_delay * (2 ** attempt) + random.uniform(0, 1)  # Exponential backoff with jitter
+                    print(f"⚠️  402 error (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s...")
+                    time.sleep(delay)
+                    continue
+                
+                # For other errors or final attempt, raise
+                if attempt == max_retries - 1:
+                    raise
+                raise
         
         if not content:
             raise ValueError("Empty response from model")
