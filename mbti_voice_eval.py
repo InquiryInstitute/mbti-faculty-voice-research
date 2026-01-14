@@ -352,14 +352,9 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
             if not isinstance(parsed, dict):
                 # If it's not a dict, try to wrap it or return default
                 parsed = {"raw_response": str(parsed)}
-        except json.JSONDecodeError:
-            # If JSON parsing fails, try markdown extraction below
-            parsed = None
-        
-        # If we successfully parsed, handle nested structures
-        if parsed is not None:
+            
             # Handle nested structures - extract evaluation if present
-        if isinstance(parsed, dict) and "evaluation" in parsed:
+            if isinstance(parsed, dict) and "evaluation" in parsed:
             # Convert nested evaluation structure to flat structure
             eval_data_raw = parsed.get("evaluation", {})
             # Ensure eval_data is a dict, not a string or other type
