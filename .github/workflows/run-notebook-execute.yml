@@ -1,0 +1,108 @@
+name: Execute MBTI Research Notebook
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - 'MBTI_Research_Colab.ipynb'
+      - 'mbti_voice_eval.py'
+
+jobs:
+  execute-notebook:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install jupyter nbconvert ipykernel papermill
+          pip install -r requirements.txt
+          pip install pandas matplotlib seaborn openai pydantic python-dotenv requests
+      
+      - name: Setup API keys (from dotenvx or secrets)
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          echo "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}" >> $GITHUB_ENV
+          echo "NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}" >> $GITHUB_ENV
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}" >> $GITHUB_ENV
+          echo "✅ API keys configured"
+      
+      - name: Execute notebook with nbconvert
+        continue-on-error: true
+        run: |
+          # Execute notebook and save executed version
+          jupyter nbconvert --to notebook --execute MBTI_Research_Colab.ipynb \
+            --output MBTI_Research_Colab_executed.ipynb \
+            --ExecutePreprocessor.timeout=600 \
+            --ExecutePreprocessor.allow_errors=True \
+            --ExecutePreprocessor.kernel_name=python3
+          
+          echo "✅ Notebook execution completed"
+      
+      - name: Check execution results
+        if: always()
+        run: |
+          if [ -f MBTI_Research_Colab_executed.ipynb ]; then
+            echo "✅ Executed notebook generated"
+            # Count cells with errors
+            python3 << PYEOF
+          import json
+          with open('MBTI_Research_Colab_executed.ipynb', 'r') as f:
+              nb = json.load(f)
+          error_count = sum(1 for cell in nb['cells'] 
+                          if cell.get('outputs') and 
+                          any('error' in str(output) for output in cell['outputs']))
+          print(f"Cells with errors: {error_count}/{len(nb['cells'])}")
+          PYEOF
+          else
+            echo "⚠️ Executed notebook not found"
+          fi
+      
+      - name: Upload executed notebook
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: executed-notebook
+          path: MBTI_Research_Colab_executed.ipynb
+          if-no-files-found: ignore
+      
+      - name: Upload generated files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-outputs
+          path: |
+            *.png
+            *.csv
+            *.json
+            *.md
+          if-no-files-found: ignore
+      
+      - name: Comment on PR (if PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ Notebook execution completed. Check artifacts for executed notebook and outputs.'
+            })
+

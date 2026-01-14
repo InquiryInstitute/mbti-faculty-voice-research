@@ -1,0 +1,70 @@
+name: Execute Notebook with Papermill
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_analysis_only:
+        description: 'Run analysis only (skip generation)'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  execute-with-papermill:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install papermill jupyter ipykernel
+          pip install -r requirements.txt
+          pip install pandas matplotlib seaborn openai pydantic python-dotenv requests
+      
+      - name: Setup API keys
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          echo "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}" >> $GITHUB_ENV
+          echo "NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}" >> $GITHUB_ENV
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}" >> $GITHUB_ENV
+      
+      - name: Execute notebook with Papermill
+        continue-on-error: true
+        run: |
+          papermill MBTI_Research_Colab.ipynb MBTI_Research_Colab_executed.ipynb \
+            --execution-timeout 600 \
+            --log-output \
+            --request-save-on-cell-execute
+      
+      - name: Upload executed notebook
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: executed-notebook-papermill
+          path: MBTI_Research_Colab_executed.ipynb
+          if-no-files-found: ignore
+      
+      - name: Upload outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-outputs
+          path: |
+            *.png
+            *.csv
+            *.json
+            *.md
+          if-no-files-found: ignore
+
