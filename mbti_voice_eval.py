@@ -27,7 +27,7 @@ import time
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Tuple
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 # OpenAI SDK (Responses API)
 from openai import OpenAI
