@@ -495,8 +495,8 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                     eval_data_raw = parsed.get("evaluation", {})
                 # Handle eval_data as string, dict, or other
                 if isinstance(eval_data_raw, dict):
-                        eval_data = eval_data_raw
-                    elif isinstance(eval_data_raw, str):
+                    eval_data = eval_data_raw
+                elif isinstance(eval_data_raw, str):
                         try:
                             eval_data = json.loads(eval_data_raw)
                             if not isinstance(eval_data, dict):
