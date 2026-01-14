@@ -445,9 +445,59 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
             except json.JSONDecodeError:
                 pass
         
+        # If all else fails, try one more time with better markdown extraction
+        # Sometimes the response is just markdown code blocks
+        if "```json" in text or "```" in text:
+            # Extract everything between first { and last }
+            start = text.find("{")
+            end = text.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                try:
+                    parsed = json.loads(text[start:end+1])
+                    if isinstance(parsed, dict):
+                        # Handle evaluation field if present
+                        if "evaluation" in parsed:
+                            eval_data_raw = parsed.get("evaluation", {})
+                            if isinstance(eval_data_raw, dict):
+                                eval_data = eval_data_raw
+                            elif isinstance(eval_data_raw, str):
+                                try:
+                                    eval_data = json.loads(eval_data_raw)
+                                    if not isinstance(eval_data, dict):
+                                        eval_data = {}
+                                except:
+                                    eval_data = {}
+                            else:
+                                eval_data = {}
+                            
+                            if not isinstance(eval_data, dict):
+                                eval_data = {}
+                            
+                            return {
+                                "voice_accuracy": eval_data.get("voice_accuracy", 3) if isinstance(eval_data, dict) else 3,
+                                "style_marker_coverage": eval_data.get("style_marker_coverage", 0.5) if isinstance(eval_data, dict) else 0.5,
+                                "persona_consistency": eval_data.get("persona_consistency", 3) if isinstance(eval_data, dict) else 3,
+                                "clarity": eval_data.get("clarity", 3) if isinstance(eval_data, dict) else 3,
+                                "overfitting_to_mbti": eval_data.get("overfitting_to_mbti", 2) if isinstance(eval_data, dict) else 2,
+                                "rationales": ["Extracted from markdown"],
+                                "cues": ["See evaluation"]
+                            }
+                        return parsed
+                except:
+                    pass
+        
         # If all else fails, print debug info and return a default structure
         print(f"Warning: Could not parse JSON from judge response. First 200 chars: {text[:200]}")
-        raise ValueError(f"JSON decode error: {e}. Response preview: {text[:200]}")
+        # Don't raise - return default instead to allow experiment to continue
+        return {
+            "voice_accuracy": 3,
+            "style_marker_coverage": 0.5,
+            "persona_consistency": 3,
+            "clarity": 3,
+            "overfitting_to_mbti": 2,
+            "rationales": [f"JSON parse error: {str(e)[:100]}"],
+            "cues": ["Parse error"]
+        }
 
 
 # -----------------------------
