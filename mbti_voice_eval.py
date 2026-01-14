@@ -412,10 +412,10 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
             result["clarity"] = eval_data.get("clarity", 3) if isinstance(eval_data, dict) else 3
             
             overfitting_val = eval_data.get("overfitting", 2) if isinstance(eval_data, dict) else 2
-            result["overfitting_to_mbti"] = eval_data.get("overfitting_to_mbti", overfitting_val) if isinstance(eval_data, dict) else 2
-            result["rationales"] = parsed.get("rationales", parsed.get("commentary", {}).values() if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
-            result["cues"] = parsed.get("cues", list(parsed.get("commentary", {}).keys())[:5] if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
-            return result
+                result["overfitting_to_mbti"] = eval_data.get("overfitting_to_mbti", overfitting_val) if isinstance(eval_data, dict) else 2
+                result["rationales"] = parsed.get("rationales", parsed.get("commentary", {}).values() if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
+                result["cues"] = parsed.get("cues", list(parsed.get("commentary", {}).keys())[:5] if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
+                return result
             return parsed
         except json.JSONDecodeError as e:
             # Try to extract JSON from markdown code blocks
