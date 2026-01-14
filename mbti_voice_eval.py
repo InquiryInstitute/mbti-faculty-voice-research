@@ -275,6 +275,7 @@ def call_model_text(client: OpenAI, model: str, instructions: str, user_input: s
             reasoning={"effort": reasoning_effort},
             instructions=instructions,
             input=user_input,
+            max_output_tokens=4096,  # Reduced to work within credit limits
         )
         return resp.output_text
     except (AttributeError, Exception) as e:
