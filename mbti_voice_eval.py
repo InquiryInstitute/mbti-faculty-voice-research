@@ -754,8 +754,8 @@ def run_experiment(
                             "rationales": json.dumps(judge.rationales, ensure_ascii=False),
                             "cues": json.dumps(judge.cues, ensure_ascii=False),
                         })
-                    else:
-                        error_msg = str(validation_error) if validation_error else "Unknown error"
+                else:
+                    error_msg = str(validation_error) if validation_error else "Unknown error"
                         row.update({
                             "voice_accuracy": -1,
                             "style_marker_coverage": -1,
