@@ -624,6 +624,60 @@ def build_generation_prompt(persona: Persona, mbti: Optional[str], user_prompt: 
             user_prompt=user_prompt
         )
 
+def assess_persona_mbti(client: OpenAI, persona: Persona, model: str) -> Dict[str, Any]:
+    """Assess what MBTI type the persona actually is based on their characteristics."""
+    assessment_prompt = f"""Assess the MBTI type of this historical figure based on their documented characteristics, writing style, and intellectual approach.
+
+Persona: {persona.name}
+Domain: {persona.domain}
+Era/Context: {persona.era}
+Voice characteristics: {persona.voice}
+Signature moves: {persona.signature_moves}
+Style markers: {', '.join(persona.style_markers)}
+What to avoid: {persona.avoid}
+
+Based on these characteristics, determine the most likely MBTI type:
+- I/E: Introversion vs Extraversion (preference for internal vs external focus)
+- S/N: Sensing vs Intuition (concrete details vs abstract patterns)
+- T/F: Thinking vs Feeling (logic vs values in decision-making)
+- J/P: Judging vs Perceiving (structured vs flexible approach)
+
+Return ONLY valid JSON with this structure:
+{{
+  "mbti_type": "INTJ|INTP|ENTJ|ENTP|INFJ|INFP|ENFJ|ENFP|ISTJ|ISFJ|ESTJ|ESFJ|ISTP|ISFP|ESTP|ESFP",
+  "confidence": 1-5,
+  "reasoning": "Detailed explanation of why this MBTI type fits (50+ words)"
+}}
+"""
+
+    assessment_schema = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "mbti_assessment",
+            "strict": True,
+            "schema": MBTIAssessmentResult.model_json_schema(),
+            "description": "MBTI type assessment for historical persona"
+        }
+    }
+    
+    try:
+        result = call_model_json(
+            client,
+            model=model,
+            instructions="You are an expert in personality psychology and historical analysis. Assess the MBTI type based on documented characteristics.",
+            user_input=assessment_prompt,
+            reasoning_effort="low",
+            response_format=assessment_schema,
+        )
+        return result
+    except Exception as e:
+        # Fallback if assessment fails
+        return {
+            "mbti_type": "UNKNOWN",
+            "confidence": 1,
+            "reasoning": f"Assessment failed: {str(e)[:200]}"
+        }
+
 def build_judge_prompt(persona: Persona, mbti: str, user_prompt: str, assistant_output: str) -> str:
     markers = "\n".join([f"- {m}" for m in persona.style_markers])
     return f"""Evaluate the assistant output against the persona voice spec.
