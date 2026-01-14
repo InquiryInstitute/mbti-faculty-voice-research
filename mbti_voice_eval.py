@@ -448,8 +448,10 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                 if isinstance(parsed, dict) and "evaluation" in parsed:
                     # Apply same transformation as above
                     eval_data_raw = parsed.get("evaluation", {})
-                    # Handle eval_data as string, dict, or other
-                    if isinstance(eval_data_raw, dict):
+                else:
+                    eval_data_raw = {}
+                # Handle eval_data as string, dict, or other
+                if isinstance(eval_data_raw, dict):
                         eval_data = eval_data_raw
                     elif isinstance(eval_data_raw, str):
                         try:
@@ -489,10 +491,11 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                 if not isinstance(parsed, dict):
                     parsed = {"raw_response": str(parsed)}
                 
+                eval_data_raw = {}
                 if isinstance(parsed, dict) and "evaluation" in parsed:
                     eval_data_raw = parsed.get("evaluation", {})
-                    # Handle eval_data as string, dict, or other
-                    if isinstance(eval_data_raw, dict):
+                # Handle eval_data as string, dict, or other
+                if isinstance(eval_data_raw, dict):
                         eval_data = eval_data_raw
                     elif isinstance(eval_data_raw, str):
                         try:
