@@ -687,45 +687,45 @@ def run_experiment(
 
                 judge_prompt = build_judge_prompt(persona, mbti, user_prompt, generated)
 
-                    # Add explicit JSON requirement to judge prompt
-                    judge_prompt_with_json = judge_prompt + "\n\nIMPORTANT: You must respond with ONLY valid JSON, no explanatory text before or after."
+                # Add explicit JSON requirement to judge prompt
+                judge_prompt_with_json = judge_prompt + "\n\nIMPORTANT: You must respond with ONLY valid JSON, no explanatory text before or after."
                     
-                    # Use structured outputs with Pydantic schema
-                    judge_schema = {
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": "judge_result",
-                            "strict": True,
-                            "schema": JudgeResult.model_json_schema(),
-                            "description": "Evaluation of assistant output against persona voice spec"
-                        }
+                # Use structured outputs with Pydantic schema
+                judge_schema = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "judge_result",
+                        "strict": True,
+                        "schema": JudgeResult.model_json_schema(),
+                        "description": "Evaluation of assistant output against persona voice spec"
                     }
-                    
-                    judge_raw = call_model_json(
-                        client,
-                        model=j_model,
-                        instructions=JUDGE_INSTRUCTIONS,
-                        user_input=judge_prompt_with_json,
-                        reasoning_effort="low",
-                        response_format=judge_schema,
-                    )
+                }
+                
+                judge_raw = call_model_json(
+                    client,
+                    model=j_model,
+                    instructions=JUDGE_INSTRUCTIONS,
+                    user_input=judge_prompt_with_json,
+                    reasoning_effort="low",
+                    response_format=judge_schema,
+                )
 
-                    judge = None
-                    validation_error = None
-                    try:
-                        judge = JudgeResult(**judge_raw)
-                    except ValidationError as ve:
-                        # If judge output is malformed, store the raw payload with sentinel scores
-                        validation_error = ve
+                judge = None
+                validation_error = None
+                try:
+                    judge = JudgeResult(**judge_raw)
+                except ValidationError as ve:
+                    validation_error = ve
 
-                    row = {
-                        "persona_key": persona.key,
-                        "persona_name": persona.name,
-                        "mbti": mbti,
-                        "prompt_id": pi,
-                        "prompt": user_prompt,
-                        "generated_text": generated,
-                    }
+                row = {
+                    "persona_key": persona.key,
+                    "persona_name": persona.name,
+                    "mbti": mbti,
+                    "use_mbti": use_mbti,
+                    "prompt_id": pi,
+                    "prompt": user_prompt,
+                    "generated_text": generated,
+                }
 
                     if judge is not None:
                         row.update({
