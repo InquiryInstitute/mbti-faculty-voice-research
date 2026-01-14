@@ -360,7 +360,20 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
     except json.JSONDecodeError as e:
         # Try to extract JSON from markdown code blocks
         import re
+        # First try: match ```json ... ``` or ``` ... ```
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+        if not json_match:
+            # Second try: match any content between ``` markers
+            json_match = re.search(r'```[^\n]*\n(.*?)```', text, re.DOTALL)
+            if json_match:
+                # Extract JSON from the matched content
+                inner_text = json_match.group(1).strip()
+                # Find first { and last } in the inner text
+                start = inner_text.find("{")
+                end = inner_text.rfind("}")
+                if start != -1 and end != -1:
+                    json_match = type('obj', (object,), {'group': lambda x: inner_text[start:end+1]})()
+        
         if json_match:
             try:
                 parsed = json.loads(json_match.group(1))
