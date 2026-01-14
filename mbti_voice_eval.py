@@ -83,6 +83,22 @@ Write 200–350 words.
 User prompt: {user_prompt}
 """
 
+CONTROL_PROMPT_TEMPLATE = """You are a faculty agent for Inquiry Institute.
+
+Persona:
+- Name: {name}
+- Domain: {domain}
+- Era/Context: {era}
+- Voice: {voice}
+- Signature moves: {signature_moves}
+- Avoid: {avoid}
+
+Task:
+Answer the user prompt in the persona's authentic voice. Stay truthful, avoid fabricating sources, and prefer clearly labeled inference over certainty.
+Write 200–350 words.
+User prompt: {user_prompt}
+"""
+
 JUDGE_INSTRUCTIONS = """You are an evaluator judging whether the assistant output matches the intended faculty persona voice.
 
 You MUST return valid JSON only, no other text.
@@ -583,17 +599,29 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
 # Core experiment
 # -----------------------------
 
-def build_generation_prompt(persona: Persona, mbti: str, user_prompt: str) -> str:
-    return STANDARD_PROMPT_TEMPLATE.format(
-        name=persona.name,
-        domain=persona.domain,
-        era=persona.era,
-        voice=persona.voice,
-        signature_moves=persona.signature_moves,
-        avoid=persona.avoid,
-        mbti=mbti,
-        user_prompt=user_prompt
-    )
+def build_generation_prompt(persona: Persona, mbti: Optional[str], user_prompt: str, use_mbti: bool = True) -> str:
+    """Build generation prompt with or without MBTI overlay."""
+    if use_mbti and mbti:
+        return STANDARD_PROMPT_TEMPLATE.format(
+            name=persona.name,
+            domain=persona.domain,
+            era=persona.era,
+            voice=persona.voice,
+            signature_moves=persona.signature_moves,
+            avoid=persona.avoid,
+            mbti=mbti,
+            user_prompt=user_prompt
+        )
+    else:
+        return CONTROL_PROMPT_TEMPLATE.format(
+            name=persona.name,
+            domain=persona.domain,
+            era=persona.era,
+            voice=persona.voice,
+            signature_moves=persona.signature_moves,
+            avoid=persona.avoid,
+            user_prompt=user_prompt
+        )
 
 def build_judge_prompt(persona: Persona, mbti: str, user_prompt: str, assistant_output: str) -> str:
     markers = "\n".join([f"- {m}" for m in persona.style_markers])
@@ -632,7 +660,7 @@ def run_experiment(
 
     # CSV header
     fieldnames = [
-        "persona_key","persona_name","mbti","prompt_id","prompt",
+        "persona_key","persona_name","mbti","use_mbti","prompt_id","prompt",
         "generated_text",
         "voice_accuracy","style_marker_coverage","persona_consistency","clarity","overfitting_to_mbti",
         "rationales","cues"
@@ -644,18 +672,20 @@ def run_experiment(
         writer.writeheader()
 
         for persona in PERSONAE:
-            for mbti in MBTI_TYPES:
-                for pi, user_prompt in enumerate(prompts):
-                    gen_prompt = build_generation_prompt(persona, mbti, user_prompt)
-                    generated = call_model_text(
-                        client,
-                        model=gen_model,
-                        instructions="You are generating the faculty agent's reply. Follow the persona and constraints.",
-                        user_input=gen_prompt,
-                        reasoning_effort="low",
-                    ).strip()
+            # Run control condition (no MBTI) first
+            for pi, user_prompt in enumerate(prompts):
+                use_mbti = False
+                mbti = "NONE"
+                gen_prompt = build_generation_prompt(persona, None, user_prompt, use_mbti=False)
+                generated = call_model_text(
+                    client,
+                    model=gen_model,
+                    instructions="You are generating the faculty agent's reply. Follow the persona and constraints.",
+                    user_input=gen_prompt,
+                    reasoning_effort="low",
+                ).strip()
 
-                    judge_prompt = build_judge_prompt(persona, mbti, user_prompt, generated)
+                judge_prompt = build_judge_prompt(persona, mbti, user_prompt, generated)
 
                     # Add explicit JSON requirement to judge prompt
                     judge_prompt_with_json = judge_prompt + "\n\nIMPORTANT: You must respond with ONLY valid JSON, no explanatory text before or after."
