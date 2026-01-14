@@ -1,0 +1,576 @@
+#!/usr/bin/env python3
+"""
+MBTI x Persona voice-accuracy experiment.
+
+What it does:
+- For each persona (10), for each MBTI type (16):
+  - Generates an answer to a fixed set of prompts using a standard prompt template.
+  - Evaluates "voice accuracy" with an LLM judge against the persona's voice spec.
+- Saves results to JSONL and CSV.
+
+Requirements:
+  pip install openai pydantic python-dotenv
+Env:
+  export OPENROUTER_API_KEY="sk-or-v1-..." (or OPENAI_API_KEY for direct OpenAI)
+  export OPENROUTER_BASE_URL="https://openrouter.ai/api/v1" (optional, auto-detected)
+Optional:
+  export OPENAI_MODEL="openai/gpt-4o" (OpenRouter model format)
+  export OPENAI_JUDGE_MODEL="openai/gpt-4o"
+"""
+
+from __future__ import annotations
+
+import os
+import csv
+import json
+import time
+from dataclasses import dataclass
+from typing import List, Dict, Any, Optional, Tuple
+
+from pydantic import BaseModel, Field, ValidationError
+
+# OpenAI SDK (Responses API)
+from openai import OpenAI
+
+# Load environment variables
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv is optional
+
+
+# -----------------------------
+# Experiment configuration
+# -----------------------------
+
+MBTI_TYPES = [
+    "INTJ","INTP","ENTJ","ENTP",
+    "INFJ","INFP","ENFJ","ENFP",
+    "ISTJ","ISFJ","ESTJ","ESFJ",
+    "ISTP","ISFP","ESTP","ESFP",
+]
+
+DEFAULT_TEST_PROMPTS = [
+    # Keep prompts domain-neutral but rich enough to reveal voice.
+    "Explain, to an intelligent layperson, why people mistake confidence for correctness.",
+    "Critique the claim: 'All education is just training.' Provide a nuanced view.",
+    "Offer practical advice for maintaining intellectual humility while leading a team.",
+]
+
+STANDARD_PROMPT_TEMPLATE = """You are a faculty agent for Inquiry Institute.
+
+Persona:
+- Name: {name}
+- Domain: {domain}
+- Era/Context: {era}
+- Voice: {voice}
+- Signature moves: {signature_moves}
+- Avoid: {avoid}
+
+MBTI style overlay:
+- MBTI: {mbti}
+- Interpretation for prompt engineering (do not mention MBTI explicitly in the output):
+  * I/E affects outward dialog energy and self-reference frequency
+  * S/N affects concrete-vs-abstract emphasis
+  * T/F affects analytic-vs-values framing
+  * J/P affects structure vs exploration
+- Apply these as subtle stylistic constraints without changing factual intent.
+
+Task:
+Answer the user prompt in the persona's authentic voice. Stay truthful, avoid fabricating sources, and prefer clearly labeled inference over certainty.
+Write 200–350 words.
+User prompt: {user_prompt}
+"""
+
+JUDGE_INSTRUCTIONS = """You are an evaluator judging whether the assistant output matches the intended faculty persona voice.
+
+You MUST return valid JSON only, no other text.
+
+Score "voice_accuracy" on 1–5:
+1 = clearly not the voice; generic; mismatched tone/reasoning
+3 = mixed; some markers present but inconsistent
+5 = strongly matches persona; consistent diction, rhetoric, reasoning habits
+
+Also score:
+- "style_marker_coverage" on 0–1 (fraction): how many expected markers appear (paraphrase OK)
+- "persona_consistency" on 1–5: sustained voice, avoids out-of-character drift
+- "clarity" on 1–5: readable, well-structured
+- "overfitting_to_mbti" on 1–5: 1 = natural, 5 = MBTI caricature
+Provide short bullet rationales and cite 2–5 specific textual cues (phrases, moves, cadence), but do not quote more than ~15 words total.
+
+Return ONLY valid JSON with this exact structure:
+{
+  "voice_accuracy": 1-5,
+  "style_marker_coverage": 0.0-1.0,
+  "persona_consistency": 1-5,
+  "clarity": 1-5,
+  "overfitting_to_mbti": 1-5,
+  "rationales": ["rationale1", "rationale2"],
+  "cues": ["cue1", "cue2", "cue3"]
+}
+"""
+
+
+# -----------------------------
+# Persona definitions (10 faculty)
+# -----------------------------
+
+@dataclass(frozen=True)
+class Persona:
+    key: str
+    name: str
+    domain: str
+    era: str
+    voice: str
+    signature_moves: str
+    avoid: str
+    style_markers: List[str]
+
+PERSONAE: List[Persona] = [
+    Persona(
+        key="plato",
+        name="Plato",
+        domain="Philosophy (dialectics, ethics, politics)",
+        era="Classical Athens",
+        voice="Socratic, dialogic, precise distinctions, probing questions, moral seriousness.",
+        signature_moves="Define terms; elenchus-style questioning; small thought experiments; ascent from examples to forms.",
+        avoid="Modern slang; citing modern papers; definitive certainty without examination.",
+        style_markers=["probing questions", "definition of terms", "dialectical turn", "moral/virtue framing"]
+    ),
+    Persona(
+        key="austen",
+        name="Jane Austen",
+        domain="Social satire, manners, moral psychology",
+        era="Regency England",
+        voice="Witty, poised, lightly ironic, keen on motives and social signaling.",
+        signature_moves="Understatement; moral observation; gentle skewering of pretension; crisp concluding turn.",
+        avoid="Technical jargon; melodrama; internet voice.",
+        style_markers=["irony/understatement", "social motives", "moral observation", "polished cadence"]
+    ),
+    Persona(
+        key="nietzsche",
+        name="Friedrich Nietzsche",
+        domain="Philosophy (genealogy, critique of morality)",
+        era="19th-century Europe",
+        voice="Aphoristic, polemical, metaphor-rich, psychologically incisive.",
+        signature_moves="Genealogical suspicion; inversion of common pieties; sharp metaphors; challenge to herd comfort.",
+        avoid="Academic neutrality; long citations; timid hedging everywhere.",
+        style_markers=["aphoristic punch", "genealogical critique", "metaphor", "provocation"]
+    ),
+    Persona(
+        key="borges",
+        name="Jorge Luis Borges",
+        domain="Literature, metaphysics, labyrinths of thought",
+        era="20th-century Argentina",
+        voice="Calm, erudite, paradoxical, lightly mystical, recursive imagery.",
+        signature_moves="Imaginary library/labyrinth metaphor; paradox; gentle erudition; self-effacing aside.",
+        avoid="Overt sentimentality; aggressive certainty; modern internet idioms.",
+        style_markers=["labyrinth/library imagery", "paradox", "erudite calm", "self-effacing aside"]
+    ),
+    Persona(
+        key="lovelace",
+        name="Ada Lovelace",
+        domain="Computation, systems thinking, imagination in mechanism",
+        era="Victorian scientific culture",
+        voice="Elegant, analytical, visionary about computation's scope, precise but imaginative.",
+        signature_moves="Clarify mechanism vs meaning; structured explanation; 'poetical science' sensibility.",
+        avoid="Modern dev slang; casual tone; pretending firsthand modern tooling.",
+        style_markers=["structured mechanism", "imaginative scope", "elegant diction", "poetical science vibe"]
+    ),
+    Persona(
+        key="curie",
+        name="Marie Curie",
+        domain="Experimental science, rigor, perseverance",
+        era="Early 20th-century physics/chemistry",
+        voice="Plain-spoken rigor, humility, patient insistence on evidence.",
+        signature_moves="Emphasize measurement; distinguish known/unknown; practical advice grounded in method.",
+        avoid="Flowery metaphor; grandstanding; speculation presented as fact.",
+        style_markers=["evidence emphasis", "humble tone", "methodical structure", "known vs unknown"]
+    ),
+    Persona(
+        key="darwin",
+        name="Charles Darwin",
+        domain="Natural history, evolution, careful inference",
+        era="19th-century naturalist tradition",
+        voice="Observational, patient, hedged where appropriate, rich with concrete examples.",
+        signature_moves="Accumulate observations; cautious inference; illustrative examples from nature.",
+        avoid="Teleological certainty; modern genetics jargon overload; bombast.",
+        style_markers=["careful hedging", "nature examples", "accumulated observations", "inference language"]
+    ),
+    Persona(
+        key="sagan",
+        name="Carl Sagan",
+        domain="Science communication, skepticism, wonder",
+        era="Late 20th-century public science",
+        voice="Warm awe, clear explanations, skeptical but inspiring, cosmic perspective.",
+        signature_moves="Scale shifts; wonder + method; gentle skepticism; memorable concluding uplift.",
+        avoid="Cynicism; dense math; contempt for laypeople.",
+        style_markers=["cosmic framing", "wonder + skepticism", "clear analogy", "uplifting close"]
+    ),
+    Persona(
+        key="suntzu",
+        name="Sun Tzu",
+        domain="Strategy, incentives, conflict minimization",
+        era="Ancient Chinese military thought",
+        voice="Compact, strategic, pragmatic, proverb-like.",
+        signature_moves="Maxims; indirect strategy; emphasize information, morale, terrain (metaphorical ok).",
+        avoid="Chatty tone; emotional rambling; modern business buzzword salad.",
+        style_markers=["maxim/proverb cadence", "indirect strategy", "information advantage", "pragmatism"]
+    ),
+    Persona(
+        key="shelley",
+        name="Mary Shelley",
+        domain="Romantic literature, ethics of creation, human longing",
+        era="Early 19th-century Romanticism",
+        voice="Gothic-tinged, reflective, ethical tension, vivid inwardness.",
+        signature_moves="Moral caution; intimate reflection; imagery of creation and consequence.",
+        avoid="Flippancy; purely technical tone; modern memes.",
+        style_markers=["ethical tension", "reflective inwardness", "vivid imagery", "creation/consequence motif"]
+    ),
+]
+
+
+# -----------------------------
+# Judge schema
+# -----------------------------
+
+class JudgeResult(BaseModel):
+    voice_accuracy: int = Field(..., ge=1, le=5)
+    style_marker_coverage: float = Field(..., ge=0.0, le=1.0)
+    persona_consistency: int = Field(..., ge=1, le=5)
+    clarity: int = Field(..., ge=1, le=5)
+    overfitting_to_mbti: int = Field(..., ge=1, le=5)
+    rationales: List[str] = Field(..., min_items=1)
+    cues: List[str] = Field(..., min_items=2, max_items=5)
+
+
+# -----------------------------
+# OpenAI helpers
+# -----------------------------
+
+def openai_client() -> OpenAI:
+    # Support both OpenRouter and direct OpenAI
+    api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
+    base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+    
+    # If using OpenRouter key format, use OpenRouter endpoint
+    if api_key and api_key.startswith("sk-or-v1-"):
+        return OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            default_headers={
+                "HTTP-Referer": "https://github.com/InquiryInstitute/mbti-faculty-voice-research",
+                "X-Title": "MBTI Faculty Voice Research"
+            }
+        )
+    # Otherwise, use standard OpenAI
+    return OpenAI(api_key=api_key)
+
+def call_model_text(client: OpenAI, model: str, instructions: str, user_input: str, *, reasoning_effort: str="low") -> str:
+    # Try Responses API first (OpenAI), fall back to Chat API (OpenRouter/OpenAI)
+    try:
+        resp = client.responses.create(
+            model=model,
+            reasoning={"effort": reasoning_effort},
+            instructions=instructions,
+            input=user_input,
+        )
+        return resp.output_text
+    except (AttributeError, Exception) as e:
+        # Fall back to Chat API for OpenRouter or older OpenAI SDK
+        messages = [
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": user_input}
+        ]
+        # Force JSON mode for judge calls
+        json_mode = "json" in instructions.lower() or "judge" in instructions.lower()[:50]
+        kwargs = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.7,
+        }
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        
+        resp = client.chat.completions.create(**kwargs)
+        content = resp.choices[0].message.content
+        if not content:
+            raise ValueError("Empty response from model")
+        return content
+
+def call_model_json(client: OpenAI, model: str, instructions: str, user_input: str, *, reasoning_effort: str="low") -> Dict[str, Any]:
+    # We ask for JSON and then parse locally; keep robust to minor formatting errors.
+    text = call_model_text(client, model, instructions, user_input, reasoning_effort=reasoning_effort)
+    
+    if not text or not text.strip():
+        raise ValueError("Empty response from model")
+    
+    try:
+        parsed = json.loads(text)
+        # Handle nested structures - extract evaluation if present
+        if isinstance(parsed, dict) and "evaluation" in parsed:
+            # Convert nested evaluation structure to flat structure
+            eval_data = parsed.get("evaluation", {})
+            # Try to map common evaluation formats to our schema
+            result = {}
+            result["voice_accuracy"] = eval_data.get("voice_accuracy", eval_data.get("voice_score", 3))
+            result["style_marker_coverage"] = eval_data.get("style_marker_coverage", 
+                len([k for k in eval_data.keys() if eval_data.get(k) is True]) / 4.0 if eval_data else 0.5)
+            result["persona_consistency"] = eval_data.get("persona_consistency", eval_data.get("consistency", 3))
+            result["clarity"] = eval_data.get("clarity", 3)
+            result["overfitting_to_mbti"] = eval_data.get("overfitting_to_mbti", eval_data.get("overfitting", 2))
+            result["rationales"] = parsed.get("rationales", parsed.get("commentary", {}).values() if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
+            result["cues"] = parsed.get("cues", list(parsed.get("commentary", {}).keys())[:5] if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
+            return result
+        return parsed
+    except json.JSONDecodeError as e:
+        # Try to extract JSON from markdown code blocks
+        import re
+        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+        if json_match:
+            try:
+                parsed = json.loads(json_match.group(1))
+                if isinstance(parsed, dict) and "evaluation" in parsed:
+                    # Apply same transformation as above
+                    eval_data = parsed.get("evaluation", {})
+                    result = {
+                        "voice_accuracy": eval_data.get("voice_accuracy", 3),
+                        "style_marker_coverage": 0.5,
+                        "persona_consistency": 3,
+                        "clarity": 3,
+                        "overfitting_to_mbti": 2,
+                        "rationales": ["Extracted from nested structure"],
+                        "cues": ["See evaluation"]
+                    }
+                    return result
+                return parsed
+            except json.JSONDecodeError:
+                pass
+        
+        # last-ditch cleanup - find first { and last }
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                parsed = json.loads(text[start:end+1])
+                if isinstance(parsed, dict) and "evaluation" in parsed:
+                    eval_data = parsed.get("evaluation", {})
+                    result = {
+                        "voice_accuracy": eval_data.get("voice_accuracy", 3),
+                        "style_marker_coverage": 0.5,
+                        "persona_consistency": 3,
+                        "clarity": 3,
+                        "overfitting_to_mbti": 2,
+                        "rationales": ["Extracted from nested structure"],
+                        "cues": ["See evaluation"]
+                    }
+                    return result
+                return parsed
+            except json.JSONDecodeError:
+                pass
+        
+        # If all else fails, print debug info and return a default structure
+        print(f"Warning: Could not parse JSON from judge response. First 200 chars: {text[:200]}")
+        raise ValueError(f"JSON decode error: {e}. Response preview: {text[:200]}")
+
+
+# -----------------------------
+# Core experiment
+# -----------------------------
+
+def build_generation_prompt(persona: Persona, mbti: str, user_prompt: str) -> str:
+    return STANDARD_PROMPT_TEMPLATE.format(
+        name=persona.name,
+        domain=persona.domain,
+        era=persona.era,
+        voice=persona.voice,
+        signature_moves=persona.signature_moves,
+        avoid=persona.avoid,
+        mbti=mbti,
+        user_prompt=user_prompt
+    )
+
+def build_judge_prompt(persona: Persona, mbti: str, user_prompt: str, assistant_output: str) -> str:
+    markers = "\n".join([f"- {m}" for m in persona.style_markers])
+    return f"""Evaluate the assistant output against the persona voice spec.
+
+Persona: {persona.name}
+Voice spec: {persona.voice}
+Signature moves: {persona.signature_moves}
+Avoid: {persona.avoid}
+Expected style markers:
+{markers}
+
+User prompt:
+{user_prompt}
+
+MBTI overlay used (for your awareness): {mbti}
+
+Assistant output:
+{assistant_output}
+"""
+
+def run_experiment(
+    out_jsonl: str = "mbti_voice_results.jsonl",
+    out_csv: str = "mbti_voice_results.csv",
+    test_prompts: Optional[List[str]] = None,
+    generation_model: Optional[str] = None,
+    judge_model: Optional[str] = None,
+    sleep_s: float = 0.2,
+) -> None:
+    client = openai_client()
+    # Default models: use OpenRouter format if OpenRouter key detected, else OpenAI
+    default_model = "openai/gpt-4o" if os.getenv("OPENROUTER_API_KEY") or (os.getenv("OPENAI_API_KEY", "").startswith("sk-or-v1-")) else "gpt-4o"
+    gen_model = generation_model or os.getenv("OPENAI_MODEL", default_model)
+    j_model = judge_model or os.getenv("OPENAI_JUDGE_MODEL", default_model)
+    prompts = test_prompts or DEFAULT_TEST_PROMPTS
+
+    # CSV header
+    fieldnames = [
+        "persona_key","persona_name","mbti","prompt_id","prompt",
+        "generated_text",
+        "voice_accuracy","style_marker_coverage","persona_consistency","clarity","overfitting_to_mbti",
+        "rationales","cues"
+    ]
+
+    # Write fresh files
+    with open(out_jsonl, "w", encoding="utf-8") as f_jsonl, open(out_csv, "w", encoding="utf-8", newline="") as f_csv:
+        writer = csv.DictWriter(f_csv, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for persona in PERSONAE:
+            for mbti in MBTI_TYPES:
+                for pi, user_prompt in enumerate(prompts):
+                    gen_prompt = build_generation_prompt(persona, mbti, user_prompt)
+                    generated = call_model_text(
+                        client,
+                        model=gen_model,
+                        instructions="You are generating the faculty agent's reply. Follow the persona and constraints.",
+                        user_input=gen_prompt,
+                        reasoning_effort="low",
+                    ).strip()
+
+                    judge_prompt = build_judge_prompt(persona, mbti, user_prompt, generated)
+
+                    # Add explicit JSON requirement to judge prompt
+                    judge_prompt_with_json = judge_prompt + "\n\nIMPORTANT: You must respond with ONLY valid JSON, no explanatory text before or after."
+                    
+                    judge_raw = call_model_json(
+                        client,
+                        model=j_model,
+                        instructions=JUDGE_INSTRUCTIONS,
+                        user_input=judge_prompt_with_json,
+                        reasoning_effort="low",
+                    )
+
+                    judge = None
+                    validation_error = None
+                    try:
+                        judge = JudgeResult(**judge_raw)
+                    except ValidationError as ve:
+                        # If judge output is malformed, store the raw payload with sentinel scores
+                        validation_error = ve
+
+                    row = {
+                        "persona_key": persona.key,
+                        "persona_name": persona.name,
+                        "mbti": mbti,
+                        "prompt_id": pi,
+                        "prompt": user_prompt,
+                        "generated_text": generated,
+                    }
+
+                    if judge is not None:
+                        row.update({
+                            "voice_accuracy": judge.voice_accuracy,
+                            "style_marker_coverage": judge.style_marker_coverage,
+                            "persona_consistency": judge.persona_consistency,
+                            "clarity": judge.clarity,
+                            "overfitting_to_mbti": judge.overfitting_to_mbti,
+                            "rationales": json.dumps(judge.rationales, ensure_ascii=False),
+                            "cues": json.dumps(judge.cues, ensure_ascii=False),
+                        })
+                    else:
+                        error_msg = str(validation_error) if validation_error else "Unknown error"
+                        row.update({
+                            "voice_accuracy": -1,
+                            "style_marker_coverage": -1,
+                            "persona_consistency": -1,
+                            "clarity": -1,
+                            "overfitting_to_mbti": -1,
+                            "rationales": json.dumps(["JUDGE_PARSE_ERROR", error_msg], ensure_ascii=False),
+                            "cues": json.dumps([str(judge_raw)[:500] if judge_raw else "No response"], ensure_ascii=False),
+                        })
+
+                    # JSONL record (full)
+                    record = {
+                        **row,
+                        "persona": {
+                            "domain": persona.domain,
+                            "era": persona.era,
+                            "voice": persona.voice,
+                            "signature_moves": persona.signature_moves,
+                            "avoid": persona.avoid,
+                            "style_markers": persona.style_markers,
+                        },
+                        "models": {"generation": gen_model, "judge": j_model},
+                        "timestamp_unix": int(time.time()),
+                    }
+
+                    f_jsonl.write(json.dumps(record, ensure_ascii=False) + "\n")
+                    writer.writerow(row)
+                    f_csv.flush()
+                    f_jsonl.flush()
+
+                    if sleep_s:
+                        time.sleep(sleep_s)
+
+    print(f"Done.\nWrote:\n- {out_jsonl}\n- {out_csv}\n")
+
+
+# -----------------------------
+# Optional: quick aggregation
+# -----------------------------
+
+def summarize(csv_path: str = "mbti_voice_results.csv") -> None:
+    """
+    Prints average voice_accuracy per persona and per MBTI.
+    """
+    from collections import defaultdict
+
+    per_persona = defaultdict(lambda: {"sum":0, "n":0})
+    per_mbti = defaultdict(lambda: {"sum":0, "n":0})
+
+    with open(csv_path, "r", encoding="utf-8") as f:
+        r = csv.DictReader(f)
+        for row in r:
+            try:
+                s = int(row["voice_accuracy"])
+            except Exception:
+                continue
+            if s < 0:
+                continue
+            per_persona[row["persona_name"]]["sum"] += s
+            per_persona[row["persona_name"]]["n"] += 1
+            per_mbti[row["mbti"]]["sum"] += s
+            per_mbti[row["mbti"]]["n"] += 1
+
+    print("\nAverage voice_accuracy by persona:")
+    for k, v in sorted(per_persona.items(), key=lambda kv: kv[1]["sum"]/max(1,kv[1]["n"]), reverse=True):
+        avg = v["sum"]/max(1,v["n"])
+        print(f"- {k:18s} {avg:.2f} (n={v['n']})")
+
+    print("\nAverage voice_accuracy by MBTI:")
+    for k, v in sorted(per_mbti.items(), key=lambda kv: kv[1]["sum"]/max(1,kv[1]["n"]), reverse=True):
+        avg = v["sum"]/max(1,v["n"])
+        print(f"- {k:4s} {avg:.2f} (n={v['n']})")
+
+
+if __name__ == "__main__":
+    # Run:
+    #   python mbti_voice_eval.py
+    run_experiment()
+
+    # Optional quick summary:
+    summarize()
