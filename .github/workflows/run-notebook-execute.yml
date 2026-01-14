@@ -30,7 +30,7 @@ jobs:
           pip install --upgrade pip
           pip install jupyter nbconvert ipykernel papermill
           pip install -r requirements.txt
-          pip install pandas matplotlib seaborn openai pydantic python-dotenv requests
+          pip install pandas matplotlib seaborn scipy openai pydantic python-dotenv requests
       
       - name: Setup API keys (from dotenvx or secrets)
         env:
