@@ -25,14 +25,10 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
       
-      - name: Install dotenvx
-        uses: dotenvx/action@v4
-      
       - name: Load encrypted .env file
         uses: dotenvx/action@v4
         with:
           env_file: .env.encrypted
-          # dotenvx will decrypt using DOTENVX_KEY from secrets
           dotenvx_key: ${{ secrets.DOTENVX_KEY }}
       
       - name: Install dependencies
@@ -50,6 +46,7 @@ jobs:
           
           # Environment variables are now loaded from .env.encrypted
           print('✅ Environment loaded via dotenvx')
+          print(f'OPENROUTER_API_KEY: {\"*\" * 10 if os.getenv(\"OPENROUTER_API_KEY\") else \"NOT SET\"}')
           
           # Try to load results
           try:
