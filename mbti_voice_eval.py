@@ -354,8 +354,15 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
         if start != -1 and end != -1 and end > start:
             try:
                 parsed = json.loads(text[start:end+1])
+                # Ensure parsed is a dict
+                if not isinstance(parsed, dict):
+                    parsed = {"raw_response": str(parsed)}
+                
                 if isinstance(parsed, dict) and "evaluation" in parsed:
                     eval_data = parsed.get("evaluation", {})
+                    # Ensure eval_data is a dict
+                    if not isinstance(eval_data, dict):
+                        eval_data = {}
                     result = {
                         "voice_accuracy": eval_data.get("voice_accuracy", 3),
                         "style_marker_coverage": 0.5,
