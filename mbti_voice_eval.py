@@ -299,21 +299,66 @@ def call_model_text(client: OpenAI, model: str, instructions: str, user_input: s
             raise ValueError("Empty response from model")
         return content
 
-def call_model_json(client: OpenAI, model: str, instructions: str, user_input: str, *, reasoning_effort: str="low") -> Dict[str, Any]:
-    # We ask for JSON and then parse locally; keep robust to minor formatting errors.
-    text = call_model_text(client, model, instructions, user_input, reasoning_effort=reasoning_effort)
+def call_model_json(client: OpenAI, model: str, instructions: str, user_input: str, *, reasoning_effort: str="low", response_format: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    # Use structured outputs if available, otherwise fall back to text parsing
+    api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
+    is_openrouter = api_key and api_key.startswith("sk-or-v1-")
     
-    if not text or not text.strip():
-        raise ValueError("Empty response from model")
-    
+    # Try structured outputs first (OpenAI) or JSON mode (OpenRouter)
     try:
-        parsed = json.loads(text)
-        # Ensure parsed is a dict
+        messages = [
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": user_input}
+        ]
+        
+        kwargs = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.7,
+        }
+        
+        # Use structured outputs if response_format provided (Pydantic schema)
+        if response_format:
+            if not is_openrouter:
+                # OpenAI structured outputs
+                kwargs["response_format"] = response_format
+            else:
+                # OpenRouter uses JSON mode with schema
+                kwargs["response_format"] = {"type": "json_object"}
+        
+        resp = client.chat.completions.create(**kwargs)
+        content = resp.choices[0].message.content
+        
+        if not content:
+            raise ValueError("Empty response from model")
+        
+        # Parse JSON response
+        parsed = json.loads(content)
         if not isinstance(parsed, dict):
-            # If it's not a dict, try to wrap it or return default
             parsed = {"raw_response": str(parsed)}
         
-        # Handle nested structures - extract evaluation if present
+        return parsed
+        
+    except Exception as e:
+        # Fallback to text-based parsing
+        text = call_model_text(client, model, instructions, user_input, reasoning_effort=reasoning_effort)
+        
+        if not text or not text.strip():
+            raise ValueError("Empty response from model")
+        
+        try:
+            parsed = json.loads(text)
+            # Ensure parsed is a dict
+            if not isinstance(parsed, dict):
+                # If it's not a dict, try to wrap it or return default
+                parsed = {"raw_response": str(parsed)}
+        except json.JSONDecodeError:
+            # If JSON parsing fails, try markdown extraction below
+            parsed = None
+        
+        # If we successfully parsed, handle nested structures
+        if parsed is not None:
+            # Handle nested structures - extract evaluation if present
         if isinstance(parsed, dict) and "evaluation" in parsed:
             # Convert nested evaluation structure to flat structure
             eval_data_raw = parsed.get("evaluation", {})
