@@ -495,8 +495,8 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                     "cues": ["See evaluation"]
                 }
                 return result
-        except json.JSONDecodeError:
-            pass
+            except json.JSONDecodeError:
+                pass
         
         # last-ditch cleanup - find first { and last }
         start = text.find("{")
