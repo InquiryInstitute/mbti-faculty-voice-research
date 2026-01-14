@@ -261,9 +261,24 @@ class JudgeResult(BaseModel):
     cues: List[str] = Field(..., min_items=2, max_items=5)
 
 class MBTIAssessmentResult(BaseModel):
-    mbti_type: str = Field(..., pattern=r"^(INTJ|INTP|ENTJ|ENTP|INFJ|INFP|ENFJ|ENFP|ISTJ|ISFJ|ESTJ|ESFJ|ISTP|ISFP|ESTP|ESFP)$")
+    mbti_type: str = Field(..., description="One of: INTJ, INTP, ENTJ, ENTP, INFJ, INFP, ENFJ, ENFP, ISTJ, ISFJ, ESTJ, ESFJ, ISTP, ISFP, ESTP, ESFP")
     confidence: int = Field(..., ge=1, le=5)
     reasoning: str = Field(..., min_length=50)
+    
+    @field_validator('mbti_type')
+    @classmethod
+    def validate_mbti_type(cls, v: str) -> str:
+        """Validate and normalize MBTI type."""
+        v = v.strip().upper()
+        valid_types = ["INTJ", "INTP", "ENTJ", "ENTP", "INFJ", "INFP", "ENFJ", "ENFP", 
+                      "ISTJ", "ISFJ", "ESTJ", "ESFJ", "ISTP", "ISFP", "ESTP", "ESFP"]
+        if v in valid_types:
+            return v
+        # Try to extract MBTI from string if it contains one
+        for mbti in valid_types:
+            if mbti in v:
+                return mbti
+        raise ValueError(f"Invalid MBTI type: {v}. Must be one of {valid_types}")
 
 
 # -----------------------------
