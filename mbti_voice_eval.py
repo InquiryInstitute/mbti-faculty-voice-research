@@ -378,49 +378,47 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                 parsed = {"raw_response": str(parsed)}
             
             # Handle nested structures - extract evaluation if present
-            eval_data_raw = {}
             if isinstance(parsed, dict) and "evaluation" in parsed:
-                # Convert nested evaluation structure to flat structure
                 eval_data_raw = parsed.get("evaluation", {})
-            # Ensure eval_data is a dict, not a string or other type
-            if isinstance(eval_data_raw, dict):
-                eval_data = eval_data_raw
-            elif isinstance(eval_data_raw, str):
-                # Try to parse if it's a JSON string
-                try:
-                    eval_data = json.loads(eval_data_raw)
-                    if not isinstance(eval_data, dict):
+                # Ensure eval_data is a dict, not a string or other type
+                if isinstance(eval_data_raw, dict):
+                    eval_data = eval_data_raw
+                elif isinstance(eval_data_raw, str):
+                    # Try to parse if it's a JSON string
+                    try:
+                        eval_data = json.loads(eval_data_raw)
+                        if not isinstance(eval_data, dict):
+                            eval_data = {}
+                    except:
                         eval_data = {}
-                except:
+                else:
                     eval_data = {}
-            else:
-                eval_data = {}
-            
-            # Try to map common evaluation formats to our schema
-            # Final safety check - ensure eval_data is definitely a dict
-            if not isinstance(eval_data, dict):
-                eval_data = {}
-            
-            result = {}
-            # Safe access with explicit type checking
-            voice_score = eval_data.get("voice_score", 3) if isinstance(eval_data, dict) else 3
-            result["voice_accuracy"] = eval_data.get("voice_accuracy", voice_score) if isinstance(eval_data, dict) else 3
-            
-            if isinstance(eval_data, dict) and eval_data:
-                style_coverage = len([k for k in eval_data.keys() if eval_data.get(k) is True]) / 4.0
-            else:
-                style_coverage = 0.5
-            result["style_marker_coverage"] = eval_data.get("style_marker_coverage", style_coverage) if isinstance(eval_data, dict) else 0.5
-            
-            consistency_val = eval_data.get("consistency", 3) if isinstance(eval_data, dict) else 3
-            result["persona_consistency"] = eval_data.get("persona_consistency", consistency_val) if isinstance(eval_data, dict) else 3
-            result["clarity"] = eval_data.get("clarity", 3) if isinstance(eval_data, dict) else 3
-            
-            overfitting_val = eval_data.get("overfitting", 2) if isinstance(eval_data, dict) else 2
-            result["overfitting_to_mbti"] = eval_data.get("overfitting_to_mbti", overfitting_val) if isinstance(eval_data, dict) else 2
-            result["rationales"] = parsed.get("rationales", parsed.get("commentary", {}).values() if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
-            result["cues"] = parsed.get("cues", list(parsed.get("commentary", {}).keys())[:5] if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
-            return result
+                
+                # Try to map common evaluation formats to our schema
+                # Final safety check - ensure eval_data is definitely a dict
+                if not isinstance(eval_data, dict):
+                    eval_data = {}
+                
+                result = {}
+                # Safe access with explicit type checking
+                voice_score = eval_data.get("voice_score", 3) if isinstance(eval_data, dict) else 3
+                result["voice_accuracy"] = eval_data.get("voice_accuracy", voice_score) if isinstance(eval_data, dict) else 3
+                
+                if isinstance(eval_data, dict) and eval_data:
+                    style_coverage = len([k for k in eval_data.keys() if eval_data.get(k) is True]) / 4.0
+                else:
+                    style_coverage = 0.5
+                result["style_marker_coverage"] = eval_data.get("style_marker_coverage", style_coverage) if isinstance(eval_data, dict) else 0.5
+                
+                consistency_val = eval_data.get("consistency", 3) if isinstance(eval_data, dict) else 3
+                result["persona_consistency"] = eval_data.get("persona_consistency", consistency_val) if isinstance(eval_data, dict) else 3
+                result["clarity"] = eval_data.get("clarity", 3) if isinstance(eval_data, dict) else 3
+                
+                overfitting_val = eval_data.get("overfitting", 2) if isinstance(eval_data, dict) else 2
+                result["overfitting_to_mbti"] = eval_data.get("overfitting_to_mbti", overfitting_val) if isinstance(eval_data, dict) else 2
+                result["rationales"] = parsed.get("rationales", parsed.get("commentary", {}).values() if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
+                result["cues"] = parsed.get("cues", list(parsed.get("commentary", {}).keys())[:5] if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
+                return result
             return parsed
         except json.JSONDecodeError as e:
             # Try to extract JSON from markdown code blocks
