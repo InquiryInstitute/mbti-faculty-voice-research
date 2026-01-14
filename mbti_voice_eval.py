@@ -396,8 +396,8 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
             result["rationales"] = parsed.get("rationales", parsed.get("commentary", {}).values() if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
             result["cues"] = parsed.get("cues", list(parsed.get("commentary", {}).keys())[:5] if isinstance(parsed.get("commentary"), dict) else ["See evaluation"])
             return result
-        return parsed
-    except json.JSONDecodeError as e:
+            return parsed
+        except json.JSONDecodeError as e:
         # Try to extract JSON from markdown code blocks
         import re
         # Strategy 1: Match ```json ... ``` or ``` ... ``` with JSON inside
