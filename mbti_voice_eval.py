@@ -488,16 +488,16 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                     eval_data = {}
                 
                 result = {
-                        "voice_accuracy": eval_data.get("voice_accuracy", 3) if isinstance(eval_data, dict) else 3,
-                        "style_marker_coverage": 0.5,
-                        "persona_consistency": 3,
-                        "clarity": 3,
-                        "overfitting_to_mbti": 2,
-                        "rationales": ["Extracted from nested structure"],
-                        "cues": ["See evaluation"]
-                    }
-                    return result
-                return parsed
+                    "voice_accuracy": eval_data.get("voice_accuracy", 3) if isinstance(eval_data, dict) else 3,
+                    "style_marker_coverage": 0.5,
+                    "persona_consistency": 3,
+                    "clarity": 3,
+                    "overfitting_to_mbti": 2,
+                    "rationales": ["Extracted from nested structure"],
+                    "cues": ["See evaluation"]
+                }
+                return result
+            return parsed
             except json.JSONDecodeError:
                 pass
         
@@ -532,16 +532,16 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                     eval_data = {}
                 
                 result = {
-                        "voice_accuracy": eval_data.get("voice_accuracy", 3) if isinstance(eval_data, dict) else 3,
-                        "style_marker_coverage": 0.5,
-                        "persona_consistency": 3,
-                        "clarity": 3,
-                        "overfitting_to_mbti": 2,
-                        "rationales": ["Extracted from nested structure"],
-                        "cues": ["See evaluation"]
-                    }
-                    return result
-                return parsed
+                    "voice_accuracy": eval_data.get("voice_accuracy", 3) if isinstance(eval_data, dict) else 3,
+                    "style_marker_coverage": 0.5,
+                    "persona_consistency": 3,
+                    "clarity": 3,
+                    "overfitting_to_mbti": 2,
+                    "rationales": ["Extracted from nested structure"],
+                    "cues": ["See evaluation"]
+                }
+                return result
+            return parsed
             except json.JSONDecodeError:
                 pass
         
