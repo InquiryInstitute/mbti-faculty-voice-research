@@ -469,20 +469,20 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                 if isinstance(eval_data_raw, dict):
                     eval_data = eval_data_raw
                 elif isinstance(eval_data_raw, str):
-                        try:
-                            eval_data = json.loads(eval_data_raw)
-                            if not isinstance(eval_data, dict):
-                                eval_data = {}
-                        except:
+                    try:
+                        eval_data = json.loads(eval_data_raw)
+                        if not isinstance(eval_data, dict):
                             eval_data = {}
-                    else:
+                    except:
                         eval_data = {}
-                    
-                    # Final safety check
-                    if not isinstance(eval_data, dict):
-                        eval_data = {}
-                    
-                    result = {
+                else:
+                    eval_data = {}
+                
+                # Final safety check
+                if not isinstance(eval_data, dict):
+                    eval_data = {}
+                
+                result = {
                         "voice_accuracy": eval_data.get("voice_accuracy", 3) if isinstance(eval_data, dict) else 3,
                         "style_marker_coverage": 0.5,
                         "persona_consistency": 3,
@@ -513,20 +513,20 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                 if isinstance(eval_data_raw, dict):
                     eval_data = eval_data_raw
                 elif isinstance(eval_data_raw, str):
-                        try:
-                            eval_data = json.loads(eval_data_raw)
-                            if not isinstance(eval_data, dict):
-                                eval_data = {}
-                        except:
+                    try:
+                        eval_data = json.loads(eval_data_raw)
+                        if not isinstance(eval_data, dict):
                             eval_data = {}
-                    else:
+                    except:
                         eval_data = {}
-                    
-                    # Final safety check
-                    if not isinstance(eval_data, dict):
-                        eval_data = {}
-                    
-                    result = {
+                else:
+                    eval_data = {}
+                
+                # Final safety check
+                if not isinstance(eval_data, dict):
+                    eval_data = {}
+                
+                result = {
                         "voice_accuracy": eval_data.get("voice_accuracy", 3) if isinstance(eval_data, dict) else 3,
                         "style_marker_coverage": 0.5,
                         "persona_consistency": 3,
