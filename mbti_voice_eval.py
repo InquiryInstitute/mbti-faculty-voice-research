@@ -756,15 +756,15 @@ def run_experiment(
                         })
                 else:
                     error_msg = str(validation_error) if validation_error else "Unknown error"
-                        row.update({
-                            "voice_accuracy": -1,
-                            "style_marker_coverage": -1,
-                            "persona_consistency": -1,
-                            "clarity": -1,
-                            "overfitting_to_mbti": -1,
-                            "rationales": json.dumps(["JUDGE_PARSE_ERROR", error_msg], ensure_ascii=False),
-                            "cues": json.dumps([str(judge_raw)[:500] if judge_raw else "No response"], ensure_ascii=False),
-                        })
+                    row.update({
+                        "voice_accuracy": -1,
+                        "style_marker_coverage": -1,
+                        "persona_consistency": -1,
+                        "clarity": -1,
+                        "overfitting_to_mbti": -1,
+                        "rationales": json.dumps(["JUDGE_PARSE_ERROR", error_msg], ensure_ascii=False),
+                        "cues": json.dumps([str(judge_raw)[:500] if judge_raw else "No response"], ensure_ascii=False),
+                    })
 
                     # JSONL record (full)
                     record = {
