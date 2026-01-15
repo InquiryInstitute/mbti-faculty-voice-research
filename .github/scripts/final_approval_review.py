@@ -97,7 +97,7 @@ def generate_final_approval_prompt(faculty_name: str, previous_recommendations: 
     return f"""You are {faculty_name}, providing a final approval review for a research paper on MBTI in prompt engineering for faculty agent accuracy.
 
 **Context:**
-You previously recommended MINOR REVISIONS for this paper. The author has now made the final changes you requested and is requesting final approval for publication.
+You previously recommended MINOR REVISIONS for this paper. The author has now made the final changes you requested and is requesting final, UNCONDITIONAL approval for publication.
 
 **Your Previous Recommendation:**
 {previous_recommendations[:1000]}
@@ -106,22 +106,27 @@ You previously recommended MINOR REVISIONS for this paper. The author has now ma
 {final_changes[:1000]}
 
 **Your Task:**
-Provide a final approval assessment. Consider:
+Provide a final, UNCONDITIONAL approval assessment. Consider:
 
 1. **Have all your requested changes been made?**
    - Are the required revisions complete?
    - Do the changes adequately address your concerns?
 
-2. **Is the paper ready for publication?**
+2. **Is the paper ready for publication WITHOUT FURTHER REVISIONS?**
    - Are there any remaining issues?
    - Does the paper meet publication standards?
+   - Is the paper ready for publication as-is?
 
 3. **Final Recommendation:**
-   Provide one of:
-   - **APPROVE** - Paper is ready for publication
-   - **NEEDS MORE WORK** - Additional changes still required
+   You MUST provide EXACTLY ONE of the following:
+   - **APPROVE** - Paper is ready for publication WITHOUT FURTHER REVISIONS. Unconditional approval.
+   - **MINOR REVISIONS** - Paper needs minor editorial changes before publication
+   - **MAJOR REVISIONS** - Paper needs substantial changes before publication
+   - **REJECT** - Paper is not suitable for publication
 
-Write your final assessment in your authentic voice as {faculty_name}. Be clear and direct: if the paper is ready, approve it. If not, specify what still needs to be done.
+**IMPORTANT:** Only recommend **APPROVE** if the paper is ready for publication as-is, without any additional revisions. If you have ANY remaining concerns or requests for changes, you must recommend MINOR REVISIONS, MAJOR REVISIONS, or REJECT.
+
+Write your final assessment in your authentic voice as {faculty_name}. Be clear and direct. State your recommendation clearly at the end of your review: **APPROVE**, **MINOR REVISIONS**, **MAJOR REVISIONS**, or **REJECT**.
 """
 
 def add_final_approval_comment(issue_number: int, comment: str) -> bool:
@@ -240,13 +245,52 @@ def main():
     else:
         changes_summary = "Final revisions made based on publication recommendations."
     
-    # Get review issues
+    # Get review issues - dynamically fetch from GitHub
     print("\n📋 Fetching review issues...")
-    issues = [
-        {"number": 1, "title": "Peer Review: Scientific Validity and Pragmatic Utility (John Dewey)", "reviewer": "John Dewey"},
-        {"number": 2, "title": "Peer Review: Computational Methodology and Statistical Rigor (Alan Turing)", "reviewer": "Alan Turing"},
-        {"number": 3, "title": "Peer Review: Experimental Design and Analytical Precision (Ada Lovelace)", "reviewer": "Ada Lovelace"},
-    ]
+    issues = []
+    # Try to get issues by searching for review issues
+    result = subprocess.run(
+        ["gh", "issue", "list", "--repo", "InquiryInstitute/mbti-faculty-voice-research",
+         "--state", "all", "--json", "number,title", "--limit", "10"],
+        capture_output=True,
+        text=True,
+        timeout=10
+    )
+    
+    if result.returncode == 0:
+        all_issues = json.loads(result.stdout)
+        # Match reviewers by title
+        reviewers_map = {
+            "John Dewey": "John Dewey",
+            "Alan Turing": "Alan Turing",
+            "Ada Lovelace": "Ada Lovelace"
+        }
+        
+        for issue in all_issues:
+            title = issue.get("title", "")
+            for reviewer_name in reviewers_map.keys():
+                if reviewer_name in title and "Peer Review" in title:
+                    issues.append({
+                        "number": issue["number"],
+                        "title": title,
+                        "reviewer": reviewer_name
+                    })
+                    break
+        
+        # If we didn't find issues, use defaults (these should match actual issue numbers)
+        if not issues:
+            issues = [
+                {"number": 4, "title": "Peer Review: Scientific Validity and Pragmatic Utility (John Dewey)", "reviewer": "John Dewey"},
+                {"number": 5, "title": "Peer Review: Computational Methodology and Statistical Rigor (Alan Turing)", "reviewer": "Alan Turing"},
+                {"number": 6, "title": "Peer Review: Experimental Design and Analytical Precision (Ada Lovelace)", "reviewer": "Ada Lovelace"},
+            ]
+    else:
+        # Fallback to default issue numbers
+        issues = [
+            {"number": 4, "title": "Peer Review: Scientific Validity and Pragmatic Utility (John Dewey)", "reviewer": "John Dewey"},
+            {"number": 5, "title": "Peer Review: Computational Methodology and Statistical Rigor (Alan Turing)", "reviewer": "Alan Turing"},
+            {"number": 6, "title": "Peer Review: Experimental Design and Analytical Precision (Ada Lovelace)", "reviewer": "Ada Lovelace"},
+        ]
     
     # Get previous recommendations
     print("\n📋 Getting previous recommendations...")
@@ -330,11 +374,23 @@ def main():
         # Add comment to issue
         add_final_approval_comment(issue_num, comment)
         
-        # Check if approved
-        if "APPROVE" in approval.upper() and "NEEDS MORE WORK" not in approval.upper():
+        # Check if approved - must be unconditional APPROVE (not MINOR REVISIONS)
+        approval_upper = approval.upper()
+        # Only approve if explicitly says APPROVE and NOT MINOR REVISIONS, MAJOR REVISIONS, or REJECT
+        if ("**APPROVE**" in approval or "RECOMMENDATION: APPROVE" in approval_upper) and \
+           "MINOR REVISIONS" not in approval_upper and \
+           "MAJOR REVISIONS" not in approval_upper and \
+           "REJECT" not in approval_upper and \
+           "NEEDS MORE WORK" not in approval_upper:
             approvals[issue_num] = "APPROVE"
+        elif "MINOR REVISIONS" in approval_upper:
+            approvals[issue_num] = "MINOR REVISIONS"
+        elif "MAJOR REVISIONS" in approval_upper:
+            approvals[issue_num] = "MAJOR REVISIONS"
+        elif "REJECT" in approval_upper:
+            approvals[issue_num] = "REJECT"
         else:
-            approvals[issue_num] = "NEEDS MORE WORK"
+            approvals[issue_num] = "UNKNOWN"
     
     print(f"\n{'='*60}")
     print(f"\n📋 Final Approval Summary:")
@@ -342,26 +398,26 @@ def main():
         reviewer = next((i['reviewer'] for i in issues if i['number'] == issue_num), "Unknown")
         print(f"   Issue #{issue_num} ({reviewer}): {status}")
     
-    # Check if all approved
+    # Check if all approved - must be unconditional APPROVE (not MINOR REVISIONS)
     all_approved = all(
-        status == "APPROVE" or "APPROVE" in str(status).upper()
+        status == "APPROVE"
         for status in approvals.values()
     )
     
     if all_approved:
-        print(f"\n✅ All reviewers approved!")
+        print(f"\n✅ All reviewers gave UNCONDITIONAL approval!")
         
         # Merge to main
         print(f"\n🔄 Merging {final_branch} to main...")
         if merge_to_main(final_branch):
             print(f"✅ Paper published! Merged to main.")
             
-            # Close issues with approval note
+            # Close issues with approval note - ONLY if all reviewers gave unconditional approval
             print(f"\n🔒 Closing review issues...")
             for issue in issues:
                 close_issue(
                     issue['number'],
-                    f"✅ Paper approved and published. Final revision merged to main."
+                    f"✅ Paper approved for publication (unconditional approval). Final revision merged to main."
                 )
             
             print(f"\n🎉 Publication complete!")
@@ -370,8 +426,14 @@ def main():
         else:
             print(f"❌ Failed to merge. Resolve conflicts manually.")
     else:
-        print(f"\n⚠️  Not all reviewers approved.")
-        print(f"   Review the final approval comments and make additional revisions if needed.")
+        print(f"\n⚠️  Not all reviewers gave unconditional approval.")
+        print(f"   Review the final approval comments:")
+        for issue_num, status in approvals.items():
+            reviewer = next((i['reviewer'] for i in issues if i['number'] == issue_num), "Unknown")
+            if status != "APPROVE":
+                print(f"     Issue #{issue_num} ({reviewer}): {status}")
+        print(f"   Issues will NOT be closed until all reviewers give unconditional APPROVE.")
+        print(f"   Make additional revisions if needed.")
 
 if __name__ == "__main__":
     main()
