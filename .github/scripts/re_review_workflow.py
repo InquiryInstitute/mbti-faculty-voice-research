@@ -12,6 +12,7 @@ import os
 import sys
 import subprocess
 from pathlib import Path
+from typing import List
 
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -24,7 +25,6 @@ from create_reviews_with_gh import (
     call_faculty_agent,
     generate_review
 )
-from typing import List
 
 def get_reviewer_from_issue(issue_number: int) -> tuple:
     """Get reviewer name and system prompt from issue."""
