@@ -142,15 +142,61 @@ Each line contains a complete record with:
 3. **Does MBTI cause overfitting?** Monitor the `overfitting_to_mbti` score.
 4. **Are some personae more sensitive to MBTI?** Analyze variance by persona.
 
+## Peer Review Process
+
+This paper has undergone peer review by three faculty reviewers:
+
+### Reviewers and Recommendations
+
+1. **John Dewey** - Scientific Validity and Pragmatic Utility  
+   - [Issue #1](https://github.com/InquiryInstitute/mbti-faculty-voice-research/issues/1)
+   - **Publication Recommendation:** **MINOR REVISIONS** ✅
+   - The manuscript is essentially ready for publication. Minor adjustments requested: standardize citation format, clarify sampling procedure, connect findings to pedagogical design.
+
+2. **Alan Turing** - Computational Methodology and Statistical Rigor  
+   - [Issue #2](https://github.com/InquiryInstitute/mbti-faculty-voice-research/issues/2)
+   - **Publication Recommendation:** **MINOR REVISIONS** ✅
+   - Paper is acceptable for publication after: providing full human-annotation rubric, clarifying statistical treatment, adding baseline comparison.
+
+3. **Ada Lovelace** - Experimental Design and Analytical Precision  
+   - [Issue #3](https://github.com/InquiryInstitute/mbti-faculty-voice-research/issues/3)
+   - **Publication Recommendation:** **MINOR REVISIONS** ✅
+   - Required before acceptance: expand human-evaluation discussion, rephrase claims regarding secondary metrics, add paragraph on which MBTI facets contribute most.
+
+**Overall Assessment:** All three reviewers recommend **MINOR REVISIONS** before publication. The paper is ready for publication after addressing the minor editorial and clarification requests. No additional experimental work is required.
+
+### Review Workflow
+
+1. **Initial Review** - Reviewers provided detailed peer reviews focusing on scientific validity, methodological rigor, and statistical soundness
+2. **Author Response** - Author responded to each review and made revisions addressing concerns that didn't require rerunning the experiment
+3. **Revisions Made** - Substantive revisions included:
+   - Enhanced statistical reporting (confidence intervals, exact p-values)
+   - Improved methodology description (missing data handling, code availability)
+   - Expanded limitations discussion (8 key limitations identified)
+   - Clarified control condition definition
+   - More cautious interpretation in discussion section
+4. **Re-Review** - Reviewers assessed the revisions and provided updated reviews
+5. **Publication Recommendations** - Reviewers provided final recommendations on publication readiness
+
+### Revision Branches
+
+The review process used separate revision branches for each reviewer:
+- `revisions/review-1-john-dewey` - Revisions addressing John Dewey's concerns
+- `revisions/review-2-alan-turing` - Revisions addressing Alan Turing's concerns  
+- `revisions/review-3-ada-lovelace` - Revisions addressing Ada Lovelace's concerns
+- `revisions/merged` - All revisions merged together (final version for review)
+
+See [`.github/PEER_REVIEW_WORKFLOW.md`](.github/PEER_REVIEW_WORKFLOW.md) for full workflow documentation.
+
 ## Related Work
 
 This research supports the paper:
 
 > **"Investigating the Value of MBTI in Prompt Engineering for Faculty Agent Accuracy"**  
-> Daniel Du Kinque  
-> Inquiry Institute, Faculty of Artificial Intelligence & Cognitive Systems
+> **Daniel C McShan, Curator, Inquiry Institute**  
+> *in voce William James*
 
-See the full paper for theoretical context, methodology, and conclusions.
+See `RESEARCH_PAPER.md` for the full paper, including theoretical context, methodology, results, and conclusions.
 
 ## License
 
@@ -161,9 +207,10 @@ See the full paper for theoretical context, methodology, and conclusions.
 If you use this research, please cite:
 
 ```
-Du Kinque, D. (2025). Investigating the Value of MBTI in Prompt Engineering 
-for Faculty Agent Accuracy. Inquiry Institute, Faculty of Artificial 
-Intelligence & Cognitive Systems.
+McShan, D. C. (2026). Investigating the Value of MBTI in Prompt Engineering 
+for Faculty Agent Accuracy. Inquiry Institute.
+
+In voce William James
 ```
 
 ## Contributing
@@ -172,6 +219,5 @@ This is a research repository. For questions or contributions, please open an is
 
 ## Acknowledgments
 
-- Inquiry Institute Faculty of Artificial Intelligence
-- Syzygy Cognitive Systems Lab
-- Terpedia Knowledge Graph Initiative
+- Inquiry Institute
+- Syzygyx Cognitive Systems Lab
