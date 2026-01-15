@@ -259,6 +259,8 @@ Several limitations should be noted:
 
 8. **Prompt length confound:** Adding an MBTI label increases prompt length, potentially affecting model behavior independently of the MBTI semantics. Future work should control for token count or test whether the effect persists when extra tokens are stripped.
 
+**Human Evaluation:** The current study relies primarily on LLM-as-judge evaluation. While we acknowledge this limitation and demonstrate that overfitting scores remain low, future work should include larger-scale human expert evaluation to validate the LLM judge assessments. A pilot validation study is proposed as future work.
+
 Future research should investigate:
 - Long-term consistency across multiple sessions
 - Interaction effects between specific personae and MBTI types
@@ -351,7 +353,7 @@ The experimental findings confirm that, when used correctly, MBTI improves:
 
 It functions as a symbolic compression layer for cognitive style—bridging human narrative reasoning and machine instruction following. The low overfitting scores indicate that MBTI provides subtle style modulation rather than caricatured personality traits.
 
-In faculty-based AI systems, where agents must embody traditions of thought, schools of reasoning, and historical epistemologies, MBTI provides a powerful and practical scaffold. The experimental evidence supports its use as Layer 4 in our proposed layered architecture for faculty agent design.
+In faculty-based AI systems, where agents must embody traditions of thought, schools of reasoning, and historical epistemologies, MBTI provides a powerful and practical scaffold. The improved voice accuracy and consistency demonstrated in this study suggests that MBTI augmentation may enhance learner engagement by providing more authentic and predictable interactions with faculty agents, though direct validation of this pedagogical impact remains an important area for future research. The experimental evidence supports its use as Layer 4 in our proposed layered architecture for faculty agent design.
 
 ---
 
