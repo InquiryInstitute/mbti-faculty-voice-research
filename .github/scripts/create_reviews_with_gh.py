@@ -133,8 +133,8 @@ Write your review in your authentic voice as {faculty_name}, but maintain scient
     
     return call_faculty_agent(faculty_name, system_prompt, prompt)
 
-def create_issue_with_gh(title: str, body: str) -> bool:
-    """Create a GitHub issue using gh CLI."""
+def update_issue_with_gh(issue_number: int, body: str) -> bool:
+    """Update a GitHub issue using gh CLI."""
     import tempfile
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
@@ -143,18 +143,18 @@ def create_issue_with_gh(title: str, body: str) -> bool:
     
     try:
         result = subprocess.run(
-            ["gh", "issue", "create", "--repo", "InquiryInstitute/mbti-faculty-voice-research", 
-             "--title", title, "--body-file", temp_file],
+            ["gh", "issue", "edit", str(issue_number), "--repo", "InquiryInstitute/mbti-faculty-voice-research", 
+             "--body-file", temp_file],
             capture_output=True,
             text=True,
             timeout=30
         )
         
         if result.returncode == 0:
-            print(f"✅ Created: {result.stdout.strip()}")
+            print(f"✅ Updated issue #{issue_number}")
             return True
         else:
-            print(f"❌ Failed: {result.stderr}")
+            print(f"❌ Failed to update issue #{issue_number}: {result.stderr}")
             return False
     finally:
         try:
@@ -181,17 +181,17 @@ def main():
     paper_content = read_research_paper()
     results_summary = get_experiment_summary()
     
-    # Faculty reviewers
+    # Faculty reviewers with issue numbers to update
     reviewers = [
         ("John Dewey", """You are John Dewey, the American philosopher, psychologist, and educational reformer. You are known for your pragmatic philosophy, emphasis on experience and inquiry, and your work in progressive education. You value practical consequences, democratic participation, and learning through doing. You write in a clear, accessible style that emphasizes the connection between theory and practice.""", 
-         "Peer Review: Scientific Validity and Pragmatic Utility (John Dewey)"),
+         1),
         ("Alan Turing", """You are Alan Turing, the British mathematician, logician, and computer scientist. You are known for your work on computability, the Turing machine, and code-breaking. You think with mathematical precision, value logical rigor, and are interested in the fundamental questions of computation and intelligence. You write with clarity and technical accuracy.""",
-         "Peer Review: Computational Methodology and Statistical Rigor (Alan Turing)"),
+         2),
         ("Ada Lovelace", """You are Ada Lovelace, the English mathematician and writer. You are known for your work on Charles Babbage's Analytical Engine and are often considered the first computer programmer. You combine mathematical rigor with imaginative vision, seeing the potential for machines to go beyond calculation. You write with elegance, precision, and visionary insight.""",
-         "Peer Review: Experimental Design and Analytical Precision (Ada Lovelace)"),
+         3),
     ]
     
-    for faculty_name, system_prompt, issue_title in reviewers:
+    for faculty_name, system_prompt, issue_number in reviewers:
         print(f"\n👤 Generating review from {faculty_name}...")
         
         review = generate_review(faculty_name, system_prompt, paper_content, results_summary)
@@ -221,8 +221,8 @@ def main():
 {results_summary}
 """
         
-        print(f"📝 Creating GitHub issue...")
-        create_issue_with_gh(issue_title, issue_body)
+        print(f"📝 Updating GitHub issue #{issue_number}...")
+        update_issue_with_gh(issue_number, issue_body)
     
     print("\n✅ Review generation complete!")
 
