@@ -1,0 +1,60 @@
+name: Generate PDF and Update Commonplace Article
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'RESEARCH_PAPER.md'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc wkhtmltopdf
+      
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests python-dotenv
+      
+      - name: Generate PDF from Markdown
+        run: |
+          pandoc RESEARCH_PAPER.md -o RESEARCH_PAPER.html --standalone --css=https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown.min.css
+          wkhtmltopdf --enable-local-file-access --page-size A4 --margin-top 20mm --margin-bottom 20mm --margin-left 20mm --margin-right 20mm RESEARCH_PAPER.html RESEARCH_PAPER.pdf
+          rm RESEARCH_PAPER.html
+          ls -lh RESEARCH_PAPER.pdf
+      
+      - name: Update research paper in Commonplace
+        env:
+          DIRECTUS_URL: ${{ secrets.DIRECTUS_URL }}
+          DIRECTUS_EMAIL: ${{ secrets.DIRECTUS_EMAIL }}
+          DIRECTUS_PASSWORD: ${{ secrets.DIRECTUS_PASSWORD }}
+        run: |
+          python3 .github/scripts/publish_research_paper.py
+      
+      - name: Upload result summary
+        if: always()
+        run: |
+          if [ -f publish_result.txt ]; then
+            echo "📋 Publication Result:"
+            cat publish_result.txt
+          fi
+          if [ -f RESEARCH_PAPER.pdf ]; then
+            echo "📄 PDF generated:"
+            ls -lh RESEARCH_PAPER.pdf
+          fi

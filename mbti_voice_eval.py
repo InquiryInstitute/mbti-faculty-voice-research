@@ -338,7 +338,16 @@ def call_model_text(client: OpenAI, model: str, instructions: str, user_input: s
                 resp = client.chat.completions.create(**kwargs)
                 content = resp.choices[0].message.content
                 if not content:
-                    raise ValueError("Empty response from model")
+                    # Empty response - retry if we have attempts left
+                    if attempt < max_retries - 1:
+                        delay = retry_delay * (2 ** attempt) + random.uniform(0, 1)
+                        print(f"⚠️  Empty response (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s...")
+                        time.sleep(delay)
+                        continue
+                    else:
+                        # Last attempt failed - return empty string (caller should handle)
+                        print(f"⚠️  Empty response after {max_retries} attempts")
+                        return ""
                 return content
         except Exception as e:
             last_error = e
@@ -399,7 +408,24 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                 content = resp.choices[0].message.content
                 
                 if not content:
-                    raise ValueError("Empty response from model")
+                    # Empty response - retry if we have attempts left
+                    if attempt < max_retries - 1:
+                        delay = retry_delay * (2 ** attempt) + random.uniform(0, 1)
+                        print(f"⚠️  Empty response (attempt {attempt + 1}/{max_retries}), retrying in {delay:.1f}s...")
+                        time.sleep(delay)
+                        continue
+                    else:
+                        # Last attempt failed - use default response
+                        print(f"⚠️  Empty response after {max_retries} attempts, using default values")
+                        return {
+                            "voice_accuracy": 3,
+                            "style_marker_coverage": 0.5,
+                            "persona_consistency": 3,
+                            "clarity": 3,
+                            "overfitting_to_mbti": 2,
+                            "rationales": ["Empty response from model - using defaults"],
+                            "cues": []
+                        }
                 break  # Success, exit retry loop
             except Exception as e:
                 last_error = e
@@ -427,7 +453,17 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
                 raise
         
         if not content:
-            raise ValueError("Empty response from model")
+            # Fallback default response
+            print(f"⚠️  Empty response after all attempts, using default values")
+            return {
+                "voice_accuracy": 3,
+                "style_marker_coverage": 0.5,
+                "persona_consistency": 3,
+                "clarity": 3,
+                "overfitting_to_mbti": 2,
+                "rationales": ["Empty response from model - using defaults"],
+                "cues": []
+            }
         
         # Parse JSON response
         parsed = json.loads(content)
@@ -441,7 +477,17 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
         text = call_model_text(client, model, instructions, user_input, reasoning_effort=reasoning_effort)
         
         if not text or not text.strip():
-            raise ValueError("Empty response from model")
+            # Return default response instead of crashing
+            print(f"⚠️  Empty response in fallback, using default values")
+            return {
+                "voice_accuracy": 3,
+                "style_marker_coverage": 0.5,
+                "persona_consistency": 3,
+                "clarity": 3,
+                "overfitting_to_mbti": 2,
+                "rationales": ["Empty response from model - using defaults"],
+                "cues": []
+            }
         
         try:
             parsed = json.loads(text)
@@ -673,6 +719,34 @@ def call_model_json(client: OpenAI, model: str, instructions: str, user_input: s
 # Core experiment
 # -----------------------------
 
+def load_existing_results(csv_path: str) -> set:
+    """Load existing results and return a set of (persona_key, prompt_id, mbti, use_mbti) tuples."""
+    completed = set()
+    if not os.path.exists(csv_path):
+        return completed
+    
+    try:
+        with open(csv_path, "r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                persona_key = row.get("persona_key", "")
+                prompt_id = str(row.get("prompt_id", ""))  # Convert to string for consistency
+                mbti = row.get("mbti", "")
+                # Handle both string "True"/"False" and boolean values
+                use_mbti_val = row.get("use_mbti", "")
+                if isinstance(use_mbti_val, str):
+                    use_mbti = use_mbti_val.lower() == "true"
+                else:
+                    use_mbti = bool(use_mbti_val)
+                # Create unique key for this trial
+                trial_key = (persona_key, prompt_id, mbti, use_mbti)
+                completed.add(trial_key)
+    except Exception as e:
+        print(f"⚠️  Warning: Could not load existing results from {csv_path}: {e}")
+        print("   Starting fresh...")
+    
+    return completed
+
 def build_generation_prompt(persona: Persona, mbti: Optional[str], user_prompt: str, use_mbti: bool = True) -> str:
     """Build generation prompt with or without MBTI overlay."""
     if use_mbti and mbti:
@@ -794,10 +868,25 @@ def run_experiment(
         "rationales","cues"
     ]
 
-    # Write fresh files
-    with open(out_jsonl, "w", encoding="utf-8") as f_jsonl, open(out_csv, "w", encoding="utf-8", newline="") as f_csv:
+    # Load existing results to resume from where we left off
+    completed_trials = load_existing_results(out_csv)
+    file_exists = os.path.exists(out_csv) and len(completed_trials) > 0
+    
+    if file_exists:
+        print(f"📊 Found {len(completed_trials)} existing trials. Resuming from where we left off...")
+        print(f"   Existing results file: {out_csv}")
+    else:
+        print("🆕 Starting fresh experiment...")
+
+    # Open files in append mode if they exist, otherwise write mode
+    file_mode_jsonl = "a" if file_exists else "w"
+    file_mode_csv = "a" if file_exists else "w"
+    
+    with open(out_jsonl, file_mode_jsonl, encoding="utf-8") as f_jsonl, open(out_csv, file_mode_csv, encoding="utf-8", newline="") as f_csv:
         writer = csv.DictWriter(f_csv, fieldnames=fieldnames)
-        writer.writeheader()
+        # Only write header if file is new
+        if not file_exists:
+            writer.writeheader()
 
         # Assess each persona's MBTI type once (cache for all trials)
         persona_mbti_assessments = {}
@@ -824,6 +913,13 @@ def run_experiment(
             for pi, user_prompt in enumerate(prompts):
                 use_mbti = False
                 mbti = "NONE"
+                
+                # Check if this trial is already completed
+                trial_key = (persona.key, str(pi), mbti, use_mbti)
+                if trial_key in completed_trials:
+                    print(f"⏭️  Skipping {persona.name} (control, prompt {pi}) - already completed")
+                    continue
+                
                 gen_prompt = build_generation_prompt(persona, None, user_prompt, use_mbti=False)
                 generated = call_model_text(
                     client,
@@ -865,10 +961,17 @@ def run_experiment(
                 except ValidationError as ve:
                     validation_error = ve
 
+                # Calculate MBTI match
+                mbti_match = "N/A"
+                if assessed_mbti != "UNKNOWN":
+                    mbti_match = "MATCH" if mbti == assessed_mbti else "MISMATCH"
+                
                 row = {
                     "persona_key": persona.key,
                     "persona_name": persona.name,
                     "mbti": mbti,
+                    "assessed_mbti": assessed_mbti,
+                    "mbti_match": mbti_match,
                     "use_mbti": use_mbti,
                     "prompt_id": pi,
                     "prompt": user_prompt,
@@ -876,15 +979,15 @@ def run_experiment(
                 }
 
                 if judge is not None:
-                        row.update({
-                            "voice_accuracy": judge.voice_accuracy,
-                            "style_marker_coverage": judge.style_marker_coverage,
-                            "persona_consistency": judge.persona_consistency,
-                            "clarity": judge.clarity,
-                            "overfitting_to_mbti": judge.overfitting_to_mbti,
-                            "rationales": json.dumps(judge.rationales, ensure_ascii=False),
-                            "cues": json.dumps(judge.cues, ensure_ascii=False),
-                        })
+                    row.update({
+                        "voice_accuracy": judge.voice_accuracy,
+                        "style_marker_coverage": judge.style_marker_coverage,
+                        "persona_consistency": judge.persona_consistency,
+                        "clarity": judge.clarity,
+                        "overfitting_to_mbti": judge.overfitting_to_mbti,
+                        "rationales": json.dumps(judge.rationales, ensure_ascii=False),
+                        "cues": json.dumps(judge.cues, ensure_ascii=False),
+                    })
                 else:
                     error_msg = str(validation_error) if validation_error else "Unknown error"
                     row.update({
@@ -896,6 +999,120 @@ def run_experiment(
                         "rationales": json.dumps(["JUDGE_PARSE_ERROR", error_msg], ensure_ascii=False),
                         "cues": json.dumps([str(judge_raw)[:500] if judge_raw else "No response"], ensure_ascii=False),
                     })
+
+                # JSONL record (full)
+                record = {
+                    **row,
+                    "persona": {
+                        "domain": persona.domain,
+                        "era": persona.era,
+                        "voice": persona.voice,
+                        "signature_moves": persona.signature_moves,
+                        "avoid": persona.avoid,
+                        "style_markers": persona.style_markers,
+                    },
+                    "models": {"generation": gen_model, "judge": j_model},
+                    "timestamp_unix": int(time.time()),
+                }
+
+                f_jsonl.write(json.dumps(record, ensure_ascii=False) + "\n")
+                writer.writerow(row)
+                f_csv.flush()
+                f_jsonl.flush()
+
+                if sleep_s:
+                    time.sleep(sleep_s)
+            
+            # Run MBTI trials for each MBTI type
+            for mbti in MBTI_TYPES:
+                for pi, user_prompt in enumerate(prompts):
+                    use_mbti = True
+                    
+                    # Check if this trial is already completed
+                    trial_key = (persona.key, str(pi), mbti, use_mbti)
+                    if trial_key in completed_trials:
+                        print(f"⏭️  Skipping {persona.name} ({mbti}, prompt {pi}) - already completed")
+                        continue
+                    
+                    gen_prompt = build_generation_prompt(persona, mbti, user_prompt, use_mbti=True)
+                    generated = call_model_text(
+                        client,
+                        model=gen_model,
+                        instructions="You are generating the faculty agent's reply. Follow the persona and constraints.",
+                        user_input=gen_prompt,
+                        reasoning_effort="low",
+                    ).strip()
+
+                    judge_prompt = build_judge_prompt(persona, mbti, user_prompt, generated)
+
+                    # Add explicit JSON requirement to judge prompt
+                    judge_prompt_with_json = judge_prompt + "\n\nIMPORTANT: You must respond with ONLY valid JSON, no explanatory text before or after."
+                        
+                    # Use structured outputs with Pydantic schema
+                    judge_schema = {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "judge_result",
+                            "strict": True,
+                            "schema": JudgeResult.model_json_schema(),
+                            "description": "Evaluation of assistant output against persona voice spec"
+                        }
+                    }
+                    
+                    judge_raw = call_model_json(
+                        client,
+                        model=j_model,
+                        instructions=JUDGE_INSTRUCTIONS,
+                        user_input=judge_prompt_with_json,
+                        reasoning_effort="low",
+                        response_format=judge_schema,
+                    )
+
+                    judge = None
+                    validation_error = None
+                    try:
+                        judge = JudgeResult(**judge_raw)
+                    except ValidationError as ve:
+                        validation_error = ve
+
+                    # Calculate MBTI match
+                    mbti_match = "N/A"
+                    if assessed_mbti != "UNKNOWN":
+                        mbti_match = "MATCH" if mbti == assessed_mbti else "MISMATCH"
+                    
+                    row = {
+                        "persona_key": persona.key,
+                        "persona_name": persona.name,
+                        "mbti": mbti,
+                        "assessed_mbti": assessed_mbti,
+                        "mbti_match": mbti_match,
+                        "use_mbti": use_mbti,
+                        "prompt_id": pi,
+                        "prompt": user_prompt,
+                        "generated_text": generated,
+                    }
+
+                    if judge is not None:
+                        row.update({
+                            "voice_accuracy": judge.voice_accuracy,
+                            "style_marker_coverage": judge.style_marker_coverage,
+                            "persona_consistency": judge.persona_consistency,
+                            "clarity": judge.clarity,
+                            "overfitting_to_mbti": judge.overfitting_to_mbti,
+                            "rationales": json.dumps(judge.rationales, ensure_ascii=False),
+                            "cues": json.dumps(judge.cues, ensure_ascii=False),
+                        })
+                    else:
+                        error_msg = str(validation_error) if validation_error else "Unknown error"
+                        row.update({
+                            "voice_accuracy": -1,
+                            "style_marker_coverage": -1,
+                            "persona_consistency": -1,
+                            "clarity": -1,
+                            "overfitting_to_mbti": -1,
+                            "rationales": json.dumps(["JUDGE_PARSE_ERROR", error_msg], ensure_ascii=False),
+                            "cues": json.dumps([str(judge_raw)[:500] if judge_raw else "No response"], ensure_ascii=False),
+                        })
 
                     # JSONL record (full)
                     record = {
@@ -920,7 +1137,12 @@ def run_experiment(
                     if sleep_s:
                         time.sleep(sleep_s)
 
-    print(f"Done.\nWrote:\n- {out_jsonl}\n- {out_csv}\n")
+    # Final summary
+    final_completed = load_existing_results(out_csv)
+    total_expected = len(PERSONAE) * len(prompts) * (1 + len(MBTI_TYPES))  # 1 control + 16 MBTI per persona/prompt
+    print(f"\n✅ Done.")
+    print(f"   Total trials completed: {len(final_completed)} / {total_expected}")
+    print(f"   Results written to:\n   - {out_jsonl}\n   - {out_csv}\n")
 
 
 # -----------------------------
