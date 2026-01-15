@@ -194,121 +194,32 @@ def main():
     
     choice = input("\nSelect option (1-5): ").strip()
     
-    if choice == "1":
-        issue_num = int(input("Enter issue number: "))
-        issue = next((i for i in issues if i['number'] == issue_num), None)
-        if not issue:
-            print(f"❌ Issue #{issue_num} not found")
-            return
+    # Automated workflow
+    # Step 1: Create branches
+    print("Step 1: Creating revision branches...")
+    branches = []
+    for issue in issues:
         reviewer = extract_reviewer_name(issue['title'])
-        branch = create_revision_branch(issue_num, reviewer)
-        print(f"\n✅ Branch ready: {branch}")
-        print(f"   Make your revisions, then commit:")
-        print(f"   git add .")
-        print(f"   git commit -m 'Address review #{issue_num} feedback from {reviewer}'")
-        print(f"   git push origin {branch}")
+        branch = create_revision_branch(issue['number'], reviewer)
+        branches.append(branch)
+        print(f"   ✅ {branch}")
     
-    elif choice == "2":
-        print("\n📝 Creating revision branches for all reviews...")
-        branches = []
-        for issue in issues:
-            reviewer = extract_reviewer_name(issue['title'])
-            branch = create_revision_branch(issue['number'], reviewer)
-            branches.append(branch)
-            print(f"   Created: {branch}")
-        
-        print(f"\n✅ Created {len(branches)} branches:")
-        for branch in branches:
-            print(f"   - {branch}")
-        print(f"\n   Make revisions on each branch, commit, and push.")
-        print(f"   Then run option 3 to merge them together.")
+    print(f"\n📝 Created {len(branches)} revision branches:")
+    for i, (issue, branch) in enumerate(zip(issues, branches), 1):
+        print(f"\n   {i}. Branch: {branch}")
+        print(f"      Issue: #{issue['number']} - {issue['title']}")
+        print(f"      Commands to make revisions:")
+        print(f"        git checkout {branch}")
+        print(f"        # Make your revisions based on review #{issue['number']}")
+        print(f"        git add .")
+        print(f"        git commit -m 'Address review #{issue['number']} feedback'")
+        print(f"        git push origin {branch}")
     
-    elif choice == "3":
-        print("\n🔄 Merging revision branches...")
-        branches = []
-        for issue in issues:
-            reviewer = extract_reviewer_name(issue['title'])
-            branch = f"revisions/review-{issue['number']}-{reviewer}"
-            branches.append(branch)
-        
-        merged_branch = merge_revision_branches(branches)
-        if merged_branch:
-            print(f"\n✅ Merged into: {merged_branch}")
-            print(f"   Push the merged branch:")
-            print(f"   git push origin {merged_branch}")
-            print(f"\n   Then run option 4 to request re-review.")
-    
-    elif choice == "4":
-        merged_branch = input("Enter merged branch name (default: revisions/merged): ").strip() or "revisions/merged"
-        print("\n📝 Enter summary of all changes made:")
-        lines = []
-        try:
-            while True:
-                line = input()
-                if not line and lines:
-                    break
-                lines.append(line)
-        except EOFError:
-            pass
-        summary = "\n".join(lines) if lines else "Revisions made based on all review feedback."
-        
-        print(f"\n📤 Requesting re-review from all reviewers...")
-        for issue in issues:
-            request_re_review(issue['number'], merged_branch, summary)
-    
-    elif choice == "5":
-        # Complete workflow
-        print("\n🚀 Starting complete workflow...\n")
-        
-        # Step 1: Create branches
-        print("Step 1: Creating revision branches...")
-        branches = []
-        for issue in issues:
-            reviewer = extract_reviewer_name(issue['title'])
-            branch = create_revision_branch(issue['number'], reviewer)
-            branches.append(branch)
-            print(f"   ✅ {branch}")
-        
-        print(f"\n📝 Make revisions on each branch:")
-        for i, (issue, branch) in enumerate(zip(issues, branches), 1):
-            print(f"\n   {i}. Branch: {branch}")
-            print(f"      Issue: #{issue['number']} - {issue['title']}")
-            print(f"      Commands:")
-            print(f"        git checkout {branch}")
-            print(f"        # Make your revisions")
-            print(f"        git add .")
-            print(f"        git commit -m 'Address review #{issue['number']} feedback'")
-            print(f"        git push origin {branch}")
-        
-        input(f"\n⏸️  Press Enter when you've made revisions on all {len(branches)} branches...")
-        
-        # Step 2: Merge branches
-        print("\nStep 2: Merging revision branches...")
-        merged_branch = merge_revision_branches(branches)
-        if not merged_branch:
-            print("❌ Merge failed - resolve conflicts and run option 3 manually")
-            return
-        
-        print(f"\n✅ Merged into: {merged_branch}")
-        push = input(f"\nPush {merged_branch}? (y/n): ").strip().lower()
-        if push == 'y':
-            subprocess.run(["git", "push", "origin", merged_branch], check=True)
-        
-        # Step 3: Request re-review
-        print("\nStep 3: Requesting re-review...")
-        summary = input("Enter summary of all changes (or press Enter for default): ").strip()
-        if not summary:
-            summary = "Revisions made based on all review feedback. See merged branch for details."
-        
-        for issue in issues:
-            request_re_review(issue['number'], merged_branch, summary)
-        
-        print("\n✅ Complete workflow finished!")
-        print(f"\n   Next: Reviewers will re-review on branch {merged_branch}")
-        print(f"   Once approved, merge {merged_branch} into main")
-    
-    else:
-        print("❌ Invalid option")
+    print(f"\n{'='*60}")
+    print(f"\n⏸️  Waiting for revisions to be made on all {len(branches)} branches...")
+    print(f"   Once you've committed and pushed revisions on all branches,")
+    print(f"   run: python3 .github/scripts/re_review_workflow.py")
+    print(f"   This will merge branches and request re-review automatically.")
 
 if __name__ == "__main__":
     main()

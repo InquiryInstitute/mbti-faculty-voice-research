@@ -22,9 +22,9 @@ from create_reviews_with_gh import (
     read_research_paper,
     get_experiment_summary,
     call_faculty_agent,
-    generate_review,
-    add_author_comment
+    generate_review
 )
+from typing import List
 
 def get_reviewer_from_issue(issue_number: int) -> tuple:
     """Get reviewer name and system prompt from issue."""
@@ -102,8 +102,20 @@ def get_original_review(issue_number: int) -> str:
         return issue.get("body", "")
     return ""
 
+def get_revision_branches() -> List[str]:
+    """Get all revision branches."""
+    result = subprocess.run(
+        ["git", "branch", "-r", "--list", "origin/revisions/review-*"],
+        capture_output=True,
+        text=True
+    )
+    if result.returncode == 0:
+        branches = [b.strip().replace("origin/", "") for b in result.stdout.strip().split("\n") if b.strip()]
+        return sorted(branches)
+    return []
+
 def main():
-    print("🔄 Re-Review Workflow\n")
+    print("🔄 Re-Review Workflow (Automated)\n")
     print("=" * 60)
     
     # Check for API key
@@ -118,14 +130,40 @@ def main():
         print("❌ OPENROUTER_API_KEY not set. Please set it or add to .env.local")
         return
     
-    # Get merged branch
-    branch = input("Enter merged revision branch name (default: revisions/merged): ").strip() or "revisions/merged"
+    # Get revision branches
+    print("\n📋 Finding revision branches...")
+    branches = get_revision_branches()
+    
+    if not branches:
+        print("❌ No revision branches found. Run author_response_workflow.py first.")
+        return
+    
+    print(f"✅ Found {len(branches)} revision branch(es):")
+    for branch in branches:
+        print(f"   - {branch}")
+    
+    # Merge branches
+    merged_branch = "revisions/merged"
+    print(f"\n🔄 Merging revision branches into {merged_branch}...")
+    
+    # Import merge function
+    sys.path.insert(0, str(project_root / ".github" / "scripts"))
+    from author_response_workflow import merge_revision_branches
+    
+    merged = merge_revision_branches(branches, merged_branch)
+    if not merged:
+        print("❌ Merge failed - resolve conflicts manually")
+        return
+    
+    # Push merged branch
+    print(f"\n📤 Pushing {merged_branch}...")
+    subprocess.run(["git", "push", "origin", merged_branch], check=True)
     
     # Checkout the merged branch
-    print(f"\n📂 Checking out branch: {branch}")
-    result = subprocess.run(["git", "checkout", branch], capture_output=True, text=True)
+    print(f"\n📂 Checking out branch: {merged_branch}")
+    result = subprocess.run(["git", "checkout", merged_branch], capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"❌ Could not checkout branch {branch}")
+        print(f"❌ Could not checkout branch {merged_branch}")
         print(f"   Error: {result.stderr}")
         return
     
@@ -154,6 +192,18 @@ def main():
     
     # Get changes summary
     print(f"\n📝 Getting changes from main to {branch}...")
+    result = subprocess.run(
+        ["git", "log", "main..HEAD", "--oneline"],
+        capture_output=True,
+        text=True
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        changes_summary = "Changes made:\n" + result.stdout
+    else:
+        changes_summary = "Revisions made based on all review feedback."
+    
+    # Get changes summary
+    print(f"\n📝 Getting changes from main to {merged_branch}...")
     result = subprocess.run(
         ["git", "log", "main..HEAD", "--oneline"],
         capture_output=True,
@@ -243,8 +293,11 @@ def main():
     
     print(f"\n{'='*60}")
     print(f"\n✅ Re-review workflow complete!")
-    print(f"\n   All reviewers have been notified to review the merged branch: {branch}")
-    print(f"   Once all reviewers approve, merge {branch} into main")
+    print(f"\n   All reviewers have been notified to review the merged branch: {merged_branch}")
+    print(f"   Once all reviewers approve, merge {merged_branch} into main:")
+    print(f"     git checkout main")
+    print(f"     git merge {merged_branch}")
+    print(f"     git push origin main")
 
 if __name__ == "__main__":
     main()
