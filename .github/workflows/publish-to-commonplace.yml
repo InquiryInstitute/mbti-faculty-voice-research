@@ -45,7 +45,7 @@ jobs:
           DIRECTUS_EMAIL: ${{ secrets.DIRECTUS_EMAIL }}
           DIRECTUS_PASSWORD: ${{ secrets.DIRECTUS_PASSWORD }}
         run: |
-          python3 .github/scripts/publish_research_paper.py
+          python3 tools/scripts/publish_research_paper.py
       
       - name: Upload result summary
         if: always()
