@@ -20,11 +20,50 @@ sys.path.insert(0, str(project_root))
 
 # Import from create_reviews_with_gh.py
 sys.path.insert(0, str(project_root / ".github" / "scripts"))
-from create_reviews_with_gh import (
-    read_research_paper,
-    get_experiment_summary,
-    call_faculty_agent
-)
+try:
+    from create_reviews_with_gh import (
+        read_research_paper,
+        get_experiment_summary,
+        call_faculty_agent
+    )
+except ImportError:
+    # Fallback implementation
+    def read_research_paper() -> str:
+        paper_path = project_root / "RESEARCH_PAPER.md"
+        return paper_path.read_text(encoding='utf-8')
+    
+    def call_faculty_agent(faculty_name: str, system_prompt: str, user_prompt: str) -> str:
+        """Call faculty agent using OpenRouter."""
+        from openai import OpenAI
+        
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            return None
+        
+        try:
+            client = OpenAI(
+                api_key=api_key,
+                base_url="https://openrouter.ai/api/v1",
+                default_headers={
+                    "HTTP-Referer": "https://github.com/InquiryInstitute/mbti-faculty-voice-research",
+                    "X-Title": "MBTI Faculty Voice Research - Final Approval"
+                }
+            )
+            
+            response = client.chat.completions.create(
+                model="openai/gpt-oss-120b",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.7,
+                max_tokens=4000
+            )
+            
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"⚠️  Error: {e}")
+            return None
 
 def get_reviewer_from_issue(issue_number: int) -> tuple:
     """Get reviewer name and system prompt from issue."""
