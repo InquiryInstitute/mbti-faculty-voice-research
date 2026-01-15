@@ -165,16 +165,40 @@ def update_issue_with_gh(issue_number: int, body: str) -> bool:
 def main():
     print("🔍 Generating faculty agent peer reviews...\n")
     
-    # Load API key
-    try:
-        from dotenv import load_dotenv
-        load_dotenv(project_root / ".env.local")
-    except:
-        pass
+    # Load API key - try multiple sources
+    api_key = os.getenv("OPENROUTER_API_KEY")
     
-    if not os.getenv("OPENROUTER_API_KEY"):
-        print("❌ OPENROUTER_API_KEY not set. Please set it or add to .env.local")
+    if not api_key:
+        # Try loading from .env.local
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(project_root / ".env.local")
+            api_key = os.getenv("OPENROUTER_API_KEY")
+        except:
+            pass
+    
+    if not api_key:
+        # Try loading from .env
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(project_root / ".env")
+            api_key = os.getenv("OPENROUTER_API_KEY")
+        except:
+            pass
+    
+    if not api_key:
+        # Try loading from environment (might be set in shell)
+        api_key = os.getenv("OPENROUTER_API_KEY")
+    
+    if not api_key:
+        print("❌ OPENROUTER_API_KEY not found.")
+        print("   Please set it: export OPENROUTER_API_KEY='sk-or-v1-...'")
+        print("   Or add it to .env.local file")
         return
+    
+    # Set it in environment for the script
+    os.environ["OPENROUTER_API_KEY"] = api_key
+    print(f"✅ Using API key (length: {len(api_key)})")
     
     # Read materials
     print("📄 Reading research materials...")
