@@ -200,8 +200,8 @@ def create_or_update_work(directus_url: str, token: str, title: str, content: st
         "slug": slug,
         "content_md": content,
         "type": "essay",  # Research paper is an essay type
-        "status": "draft",
-        "visibility": "private",
+        "status": "published",  # Changed from "draft" - paper has unconditional approval
+        "visibility": "public",  # Changed from "private" - paper is approved for publication
     }
     
     if author_id:
